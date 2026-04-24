@@ -1,0 +1,20 @@
+{
+  "name": "Rincol Tech ERP",
+  "short_name": "Rincol ERP",
+  "description": "Quotations, receipts, balancing and maintenance for Rincol Tech Solutions",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#131625",
+  "theme_color": "#89b4fa",
+  "icons": [
+    {
+      "src": "/static/img/rincol_icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["business", "finance"],
+  "lang": "en"
+}

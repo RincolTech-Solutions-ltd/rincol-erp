@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block title %}Balancing{% endblock %}
+{% block breadcrumb %}Balancing{% endblock %}
+
+{% macro money(v) %}{{ '{:,.0f}'.format(v or 0) }}{% endmacro %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h5 class="mb-0">Job Balancing</h5>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('balancing_report') }}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-graph-up"></i> Report
+    </a>
+    <a href="{{ url_for('balancing_edit') }}" class="btn btn-primary btn-sm">
+      <i class="bi bi-plus"></i> New Job
+    </a>
+  </div>
+</div>
+
+{% if unbalanced %}
+<div class="card mb-4" style="border-color:rgba(251,191,36,.3)">
+  <div class="card-header d-flex justify-content-between align-items-center" style="background:rgba(251,191,36,.07)">
+    <span class="section-header mb-0" style="color:#fbbf24">
+      <i class="bi bi-exclamation-triangle me-1"></i> Needs Balancing
+    </span>
+    <span class="badge bg-warning text-dark">{{ unbalanced | length }} job{{ 's' if unbalanced|length != 1 }}</span>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0 align-middle">
+        <thead>
+          <tr>
+            <th>Quotation</th><th>Customer</th><th class="text-end">Amount (UGX)</th><th>Executor</th><th>Date</th><th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for q in unbalanced %}
+          <tr>
+            <td><a href="{{ url_for('quotations_view', qid=q.id) }}" class="text-blue text-decoration-none">{{ q.quotation_no }}</a></td>
+            <td>{{ q.customer_name }}</td>
+            <td class="text-end money small">{{ money(q.total_amount) }}</td>
+            <td class="text-muted small">{{ q.executor_name or '—' }}</td>
+            <td class="text-muted small">{{ q.execution_date or q.date }}</td>
+            <td class="text-end">
+              <a href="{{ url_for('balancing_edit') }}?qid={{ q.id }}" class="btn btn-sm btn-warning text-dark">
+                <i class="bi bi-calculator"></i> Start Balancing
+              </a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{# Summary strip #}
+<div class="row g-3 mb-3">
+  <div class="col-6 col-md-3">
+    <div class="card h-100" style="border-color:rgba(166,227,161,.25)">
+      <div class="card-body py-2">
+        <div class="section-header mb-1">Total Profit</div>
+        <div class="money fw-bold text-green fs-5">UGX {{ money(summary.profit) }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card h-100" style="border-color:rgba(137,180,250,.25)">
+      <div class="card-body py-2">
+        <div class="section-header mb-1">Hillary Still Owed</div>
+        <div class="money fw-bold {% if summary.hillary_remaining > 0 %}text-danger{% else %}text-green{% endif %}">
+          UGX {{ money(summary.hillary_remaining) }}
+        </div>
+        <div class="text-muted" style="font-size:.7rem">profit share: UGX {{ money(summary.h_share) }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card h-100" style="border-color:rgba(167,139,250,.25)">
+      <div class="card-body py-2">
+        <div class="section-header mb-1">Dennis Still Owed</div>
+        <div class="money fw-bold {% if summary.dennis_remaining > 0 %}text-danger{% else %}text-green{% endif %}" style="color:{% if summary.dennis_remaining > 0 %}#f87171{% else %}#a6e3a1{% endif %}">
+          UGX {{ money(summary.dennis_remaining) }}
+        </div>
+        <div class="text-muted" style="font-size:.7rem">profit share: UGX {{ money(summary.d_share) }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card h-100" style="border-color:rgba(166,227,161,.25)">
+      <div class="card-body py-2">
+        <div class="section-header mb-1">Jobs Balanced</div>
+        <div class="fw-bold fs-5 text-green">{{ jobs | length }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0 align-middle">
+        <thead>
+          <tr>
+            <th>Job</th>
+            <th>Status</th>
+            <th class="text-end">Quoted</th>
+            <th class="text-end">Profit</th>
+            <th class="text-end text-blue">H Owed</th>
+            <th class="text-end" style="color:#a78bfa">D Owed</th>
+            <th>Date</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for j in jobs %}
+          {% set status_cls = {'Open':'secondary','In Progress':'warning','Settled':'success'}.get(j.computed_status, 'secondary') %}
+          <tr>
+            <td>
+              <a href="{{ url_for('balancing_view', jid=j.id) }}" class="fw-semibold text-decoration-none">
+                {{ j.job_name }}
+              </a>
+              {% if j.linked_quotation_id %}
+              <div class="text-muted small">{{ j.quotation_no or j.linked_quotation_id[:8] }}</div>
+              {% endif %}
+            </td>
+            <td><span class="badge bg-{{ status_cls }} bg-opacity-25 text-{{ status_cls }}">{{ j.computed_status }}</span></td>
+            <td class="text-end money small">{{ money(j.quoted) }}</td>
+            <td class="text-end money fw-bold {% if j.profit >= 0 %}text-green{% else %}text-danger{% endif %}">
+              {{ money(j.profit) }}
+            </td>
+            <td class="text-end money small {% if j.hillary_remaining > 0 %}text-danger{% else %}text-green{% endif %}">
+              {{ money(j.hillary_remaining) }}
+            </td>
+            <td class="text-end money small {% if j.dennis_remaining > 0 %}text-danger{% else %}text-green{% endif %}">
+              {{ money(j.dennis_remaining) }}
+            </td>
+            <td class="text-muted small">{{ j.date }}</td>
+            <td class="text-end">
+              <a href="{{ url_for('balancing_view', jid=j.id) }}" class="btn btn-sm btn-outline-primary py-0 px-2" title="Open">
+                <i class="bi bi-eye"></i>
+              </a>
+              <a href="{{ url_for('balancing_edit', jid=j.id) }}" class="btn btn-sm btn-outline-secondary py-0 px-2" title="Edit">
+                <i class="bi bi-pencil"></i>
+              </a>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="10" class="text-center text-muted py-4">No balancing records yet. Click "New Job" to start.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

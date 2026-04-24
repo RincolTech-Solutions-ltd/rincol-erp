@@ -1,0 +1,402 @@
+{% extends "base.html" %}
+{% block title %}{{ job.job_name }}{% endblock %}
+{% block breadcrumb %}
+  <a href="{{ url_for('balancing_list') }}" class="text-muted text-decoration-none">Balancing</a>
+  &rsaquo; {{ job.job_name }}
+{% endblock %}
+
+{% macro money(v) %}UGX {{ '{:,.0f}'.format(v or 0) }}{% endmacro %}
+{% macro mraw(v) %}{{ '{:,.0f}'.format(v or 0) }}{% endmacro %}
+
+{% block content %}
+{# ── Header ──────────────────────────────────────────────────────────────── #}
+<div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
+  <div>
+    <h5 class="mb-0">{{ job.job_name }}</h5>
+    <div class="text-muted small">
+      {{ job.date }}
+      {% if job.linked_quotation_id %}
+      &middot; Linked to quotation
+      {% endif %}
+    </div>
+  </div>
+  <div class="d-flex gap-2 align-items-center">
+    {% set status_cls = {'Open':'secondary','In Progress':'warning','Settled':'success'}.get(fin.computed_status,'secondary') %}
+    <span class="badge bg-{{ status_cls }} bg-opacity-25 text-{{ status_cls }} px-2 py-1">
+      {{ fin.computed_status }}
+    </span>
+    <a href="{{ url_for('balancing_edit', jid=job.id) }}" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-pencil"></i> Edit
+    </a>
+    <form method="post" action="{{ url_for('balancing_delete', jid=job.id) }}"
+          onsubmit="return confirm('Delete this job permanently?')">
+      <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+    </form>
+  </div>
+</div>
+
+{# ── Financial Summary ────────────────────────────────────────────────────── #}
+<div class="card mb-3" style="border-color:rgba(255,255,255,.1)">
+  <div class="card-header d-flex justify-content-between">
+    <span class="section-header mb-0">Financial Summary</span>
+    <span class="text-muted small">Hillary {{ fin.h_ratio }}% / Dennis {{ fin.d_ratio }}%</span>
+  </div>
+  <div class="card-body">
+    <div class="row g-3">
+      {# Left: breakdown #}
+      <div class="col-md-6">
+        <table class="table table-sm mb-0">
+          <tbody>
+            <tr>
+              <td class="text-muted">Quoted Amount</td>
+              <td class="text-end money fw-semibold">{{ money(fin.quoted) }}</td>
+            </tr>
+            <tr>
+              <td class="text-muted">Total Costs (spend lines)</td>
+              <td class="text-end money text-danger">({{ money(fin.total_costs) }})</td>
+            </tr>
+            {% if fin.warranty_cost > 0 %}
+            <tr class="table-warning table-warning-subtle">
+              <td class="text-muted">Warranty Costs (maintenance)</td>
+              <td class="text-end money text-warning">({{ money(fin.warranty_cost) }})</td>
+            </tr>
+            {% endif %}
+            <tr class="fw-bold">
+              <td>Gross Profit</td>
+              <td class="text-end money {% if fin.profit >= 0 %}text-green{% else %}text-danger{% endif %}">
+                {{ money(fin.profit) }}
+              </td>
+            </tr>
+            {% if fin.warranty_cost > 0 %}
+            <tr>
+              <td class="text-muted small">True Profit (after warranty)</td>
+              <td class="text-end money small {% if fin.true_profit >= 0 %}text-green{% else %}text-danger{% endif %}">
+                {{ money(fin.true_profit) }}
+              </td>
+            </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+      {# Right: who gets what #}
+      <div class="col-md-6">
+        <div class="rounded p-3" style="background:rgba(255,255,255,.04);border:1px solid #2a2d45">
+          <div class="row g-2 text-center mb-2">
+            <div class="col-6">
+              <div class="section-header small">Hillary</div>
+              <div class="text-blue fw-bold money">{{ money(fin.hillary_profit_share) }}</div>
+              <div class="text-muted" style="font-size:.7rem">profit share</div>
+              {% if fin.hillary_spend > 0 %}
+              <div class="text-muted small">+ {{ money(fin.hillary_spend) }} spent</div>
+              <div class="fw-bold text-blue">= {{ money(fin.hillary_total_due) }}</div>
+              {% endif %}
+            </div>
+            <div class="col-6">
+              <div class="section-header small">Dennis</div>
+              <div class="fw-bold money" style="color:#a78bfa">{{ money(fin.dennis_profit_share) }}</div>
+              <div class="text-muted" style="font-size:.7rem">profit share</div>
+              {% if fin.dennis_spend > 0 %}
+              <div class="text-muted small">+ {{ money(fin.dennis_spend) }} spent</div>
+              <div class="fw-bold" style="color:#a78bfa">= {{ money(fin.dennis_total_due) }}</div>
+              {% endif %}
+            </div>
+          </div>
+          <hr class="my-2" style="border-color:#2a2d45">
+          {# Settlement positions — both sides #}
+          <div class="small">
+            <div class="row g-0">
+              <div class="col-6 pe-2">
+                <div class="text-muted mb-1" style="font-size:.7rem">HILLARY</div>
+                <div class="d-flex justify-content-between">
+                  <span class="text-muted">Due</span>
+                  <span class="money text-blue">{{ money(fin.hillary_total_due) }}</span>
+                </div>
+                <div class="d-flex justify-content-between">
+                  <span class="text-muted">Collected</span>
+                  <span class="money text-muted">({{ money(fin.hillary_collected) }})</span>
+                </div>
+                <div class="d-flex justify-content-between">
+                  <span class="text-muted">Dennis paid her</span>
+                  <span class="money text-muted">({{ money(fin.dennis_to_hillary) }})</span>
+                </div>
+                <hr class="my-1" style="border-color:#2a2d45">
+                <div class="d-flex justify-content-between fw-bold">
+                  <span>Still owed</span>
+                  <span class="money {% if fin.hillary_remaining > 0 %}text-danger{% else %}text-green{% endif %}">
+                    {{ money(fin.hillary_remaining) }}
+                  </span>
+                </div>
+              </div>
+              <div class="col-6 ps-2 border-start" style="border-color:#2a2d45 !important">
+                <div class="text-muted mb-1" style="font-size:.7rem">DENNIS</div>
+                <div class="d-flex justify-content-between">
+                  <span class="text-muted">Due</span>
+                  <span class="money" style="color:#a78bfa">{{ money(fin.dennis_total_due) }}</span>
+                </div>
+                <div class="d-flex justify-content-between">
+                  <span class="text-muted">Collected</span>
+                  <span class="money text-muted">({{ money(fin.dennis_collected) }})</span>
+                </div>
+                <div class="d-flex justify-content-between">
+                  <span class="text-muted">Hillary paid him</span>
+                  <span class="money text-muted">({{ money(fin.hillary_to_dennis) }})</span>
+                </div>
+                <hr class="my-1" style="border-color:#2a2d45">
+                <div class="d-flex justify-content-between fw-bold">
+                  <span>Still owed</span>
+                  <span class="money {% if fin.dennis_remaining > 0 %}text-danger{% else %}text-green{% endif %}">
+                    {{ money(fin.dennis_remaining) }}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3">
+{# ── LEFT COLUMN ─────────────────────────────────────────────────────────── #}
+<div class="col-md-6">
+
+  {# Spend Lines #}
+  <div class="card mb-3">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span class="section-header mb-0">Costs (Spend Lines)</span>
+      <span class="badge bg-secondary">Total: {{ money(fin.total_costs) }}</span>
+    </div>
+    <div class="card-body p-0">
+      {% if spend_lines %}
+      <table class="table table-sm mb-0">
+        <thead><tr>
+          <th>Description</th><th>Paid by</th><th class="text-end">Amount</th><th></th>
+        </tr></thead>
+        <tbody>
+          {% for s in spend_lines %}
+          <tr>
+            <td class="small">{{ s.description }}</td>
+            <td class="small">
+              <span class="badge {% if s.paid_by=='Hillary' %}bg-primary bg-opacity-25 text-primary{% else %}badge-purple{% endif %}">
+                {{ s.paid_by }}
+              </span>
+            </td>
+            <td class="text-end money small">{{ mraw(s.amount) }}</td>
+            <td class="text-end">
+              <form method="post" action="{{ url_for('balancing_spend_delete', jid=job.id, sid=s.id) }}">
+                <button class="btn btn-sm btn-link text-danger p-0" title="Delete">
+                  <i class="bi bi-x-circle"></i>
+                </button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="text-center text-muted py-3 small">No spend lines yet.</div>
+      {% endif %}
+    </div>
+    <div class="card-footer p-2">
+      <form method="post" action="{{ url_for('balancing_spend_add', jid=job.id) }}" class="row g-1 align-items-end">
+        <div class="col-5">
+          <input type="text" name="description" class="form-control form-control-sm" placeholder="Description *" required>
+        </div>
+        <div class="col-3">
+          <select name="paid_by" class="form-select form-select-sm">
+            <option>Hillary</option>
+            <option selected>Dennis</option>
+          </select>
+        </div>
+        <div class="col-3">
+          <input type="number" name="amount" class="form-control form-control-sm" placeholder="Amount" min="0" step="any" required>
+        </div>
+        <div class="col-1 text-end">
+          <button class="btn btn-sm btn-success w-100" title="Add"><i class="bi bi-plus"></i></button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {# Receipts — single source of truth for customer payments #}
+  <div class="card mb-3">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span class="section-header mb-0">Customer Receipts</span>
+      <div class="d-flex align-items-center gap-2">
+        <span class="badge bg-secondary">Total collected: {{ money(fin.total_collected) }}</span>
+        {% if job.linked_quotation_id %}
+        <a href="{{ url_for('receipts_new') }}?qid={{ job.linked_quotation_id }}"
+           class="btn btn-sm btn-outline-success py-0 px-2">
+          <i class="bi bi-plus"></i> New Receipt
+        </a>
+        {% endif %}
+      </div>
+    </div>
+    <div class="card-body p-0">
+      {% if receipts %}
+      <table class="table table-sm mb-0">
+        <thead><tr>
+          <th>Date</th><th>Receipt No.</th><th>Collected by</th><th class="text-end">Amount Paid</th>
+        </tr></thead>
+        <tbody>
+          {% for r in receipts %}
+          <tr>
+            <td class="small">{{ r.date }}</td>
+            <td class="small">
+              <a href="{{ url_for('receipts_view', rid=r.id) }}" class="text-muted">{{ r.receipt_no }}</a>
+            </td>
+            <td class="small">
+              <span class="badge {% if r.collected_by=='Hillary' %}bg-primary bg-opacity-25 text-primary{% else %}badge-purple{% endif %}">
+                {{ r.collected_by or '—' }}
+              </span>
+            </td>
+            <td class="text-end money small">{{ mraw(r.amount_paid) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="text-center text-muted py-3 small">
+        No receipts recorded yet.
+        {% if job.linked_quotation_id %}
+        <a href="{{ url_for('receipts_new') }}?qid={{ job.linked_quotation_id }}">Record one now.</a>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+
+{# ── RIGHT COLUMN ─────────────────────────────────────────────────────────── #}
+<div class="col-md-6">
+
+  {# Settlements (between Hillary and Dennis) #}
+  <div class="card mb-3">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span class="section-header mb-0">Settlements</span>
+      <span class="badge bg-secondary">Total moved: {{ money(fin.total_settled) }}</span>
+    </div>
+    <div class="card-body p-0">
+      {% if settlements %}
+      <table class="table table-sm mb-0">
+        <thead><tr><th>Date</th><th>Direction</th><th class="text-end">Amount</th><th>Notes</th><th></th></tr></thead>
+        <tbody>
+          {% for s in settlements %}
+          {% set fp = s.from_person or 'Hillary' %}
+          <tr>
+            <td class="small">{{ s.date }}</td>
+            <td class="small">
+              {% if fp == 'Hillary' %}
+                <span class="text-blue">Hillary</span> → <span style="color:#a78bfa">Dennis</span>
+              {% else %}
+                <span style="color:#a78bfa">Dennis</span> → <span class="text-blue">Hillary</span>
+              {% endif %}
+            </td>
+            <td class="text-end money small">{{ mraw(s.amount) }}</td>
+            <td class="small text-muted">{{ s.notes or '—' }}</td>
+            <td class="text-end">
+              <form method="post" action="{{ url_for('balancing_settlement_delete', jid=job.id, sid=s.id) }}">
+                <button class="btn btn-sm btn-link text-danger p-0"><i class="bi bi-x-circle"></i></button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="text-center text-muted py-3 small">No settlements yet.</div>
+      {% endif %}
+    </div>
+    <div class="card-footer p-2">
+      <form method="post" action="{{ url_for('balancing_settlement_add', jid=job.id) }}" class="row g-1 align-items-end">
+        <div class="col-3">
+          <input type="date" name="date" class="form-control form-control-sm" required>
+        </div>
+        <div class="col-3">
+          <select name="from_person" class="form-select form-select-sm" title="Who is paying?">
+            <option value="Hillary">Hillary → Dennis</option>
+            <option value="Dennis">Dennis → Hillary</option>
+          </select>
+        </div>
+        <div class="col-3">
+          <input type="number" name="amount" class="form-control form-control-sm" placeholder="Amount" min="0" step="any" required>
+        </div>
+        <div class="col-2">
+          <input type="text" name="notes" class="form-control form-control-sm" placeholder="Notes">
+        </div>
+        <div class="col-1 text-end">
+          <button class="btn btn-sm btn-success w-100"><i class="bi bi-plus"></i></button>
+        </div>
+      </form>
+    </div>
+    {# Status alerts #}
+    {% if fin.hillary_remaining > 0 and fin.dennis_remaining > 0 %}
+    <div class="card-footer py-1 px-2" style="background:rgba(248,113,113,.08);border-top-color:rgba(248,113,113,.2)">
+      <div class="small text-danger">
+        <i class="bi bi-exclamation-circle"></i>
+        Hillary still owed {{ money(fin.hillary_remaining) }} &nbsp;·&nbsp; Dennis still owed {{ money(fin.dennis_remaining) }}
+      </div>
+    </div>
+    {% elif fin.dennis_remaining > 0 %}
+    <div class="card-footer py-1 px-2" style="background:rgba(248,113,113,.08);border-top-color:rgba(248,113,113,.2)">
+      <div class="small text-danger"><i class="bi bi-exclamation-circle"></i> Dennis still owed {{ money(fin.dennis_remaining) }}</div>
+    </div>
+    {% elif fin.hillary_remaining > 0 %}
+    <div class="card-footer py-1 px-2" style="background:rgba(248,113,113,.08);border-top-color:rgba(248,113,113,.2)">
+      <div class="small text-danger"><i class="bi bi-exclamation-circle"></i> Hillary still owed {{ money(fin.hillary_remaining) }}</div>
+    </div>
+    {% else %}
+    <div class="card-footer py-1 px-2" style="background:rgba(166,227,161,.08);border-top-color:rgba(166,227,161,.2)">
+      <div class="small text-green fw-semibold"><i class="bi bi-check-circle"></i> Both fully settled.</div>
+    </div>
+    {% endif %}
+  </div>
+
+  {# Quick snapshot box #}
+  <div class="card mb-3">
+    <div class="card-header"><span class="section-header mb-0">Position Snapshot</span></div>
+    <div class="card-body p-0">
+      <table class="table table-sm mb-0">
+        <thead><tr><th></th><th class="text-end text-blue">Hillary</th><th class="text-end" style="color:#a78bfa">Dennis</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="text-muted small">Total due from job</td>
+            <td class="text-end money small text-blue">{{ money(fin.hillary_total_due) }}</td>
+            <td class="text-end money small" style="color:#a78bfa">{{ money(fin.dennis_total_due) }}</td>
+          </tr>
+          <tr>
+            <td class="text-muted small">Collected from customer</td>
+            <td class="text-end money small">({{ money(fin.hillary_collected) }})</td>
+            <td class="text-end money small">({{ money(fin.dennis_collected) }})</td>
+          </tr>
+          <tr>
+            <td class="text-muted small">Received from other party</td>
+            <td class="text-end money small">({{ money(fin.dennis_to_hillary) }})</td>
+            <td class="text-end money small">({{ money(fin.hillary_to_dennis) }})</td>
+          </tr>
+          <tr class="fw-bold border-top">
+            <td>Still owed</td>
+            <td class="text-end money {% if fin.hillary_remaining > 0 %}text-danger{% else %}text-green{% endif %}">
+              {{ money(fin.hillary_remaining) }}
+            </td>
+            <td class="text-end money {% if fin.dennis_remaining > 0 %}text-danger{% else %}text-green{% endif %}">
+              {{ money(fin.dennis_remaining) }}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% if job.notes %}
+  <div class="card">
+    <div class="card-header"><span class="section-header mb-0">Notes</span></div>
+    <div class="card-body"><p class="mb-0 small">{{ job.notes }}</p></div>
+  </div>
+  {% endif %}
+
+</div>
+</div>
+{% endblock %}

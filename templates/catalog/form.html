@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}{% if item %}Edit Item{% else %}New Item{% endif %}{% endblock %}
+{% block breadcrumb %}
+  <a href="{{ url_for('catalog_list') }}" class="text-muted text-decoration-none">Catalog</a>
+  &rsaquo; {% if item %}Edit{% else %}New{% endif %}
+{% endblock %}
+
+{% block content %}
+<form method="post">
+<div class="row g-4 justify-content-center">
+  <div class="col-lg-6">
+    <div class="card">
+      <div class="card-header"><span class="section-header mb-0">Item Details</span></div>
+      <div class="card-body">
+        <div class="row g-2">
+          <div class="col-5">
+            <label class="form-label">Item ID</label>
+            <input type="text" name="id" class="form-control form-control-sm font-monospace"
+                   value="{{ item.id if item else '' }}" {% if item %}readonly{% endif %} placeholder="e.g. INV-001">
+          </div>
+          <div class="col-7">
+            <label class="form-label">Category</label>
+            <select name="category" class="form-select form-select-sm">
+              {% for c in categories %}
+              <option value="{{ c }}" {% if item and item.category==c %}selected{% endif %}>{{ c }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-12">
+            <label class="form-label">Name *</label>
+            <input type="text" name="name" class="form-control form-control-sm" required
+                   value="{{ item.name if item else '' }}">
+          </div>
+          <div class="col-12">
+            <label class="form-label">Spec / Description</label>
+            <input type="text" name="spec" class="form-control form-control-sm"
+                   value="{{ item.spec if item else '' }}" placeholder="e.g. 200Ah 12V LFP">
+          </div>
+          <div class="col-4">
+            <label class="form-label">UOM</label>
+            <select name="uom" class="form-select form-select-sm">
+              {% for u in ['pc','lot','job','m','roll','set','pair','box'] %}
+              <option value="{{ u }}" {% if item and item.uom==u %}selected{% endif %}>{{ u }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-4">
+            <label class="form-label">Buy Price (UGX)</label>
+            <input type="number" name="buy_price" class="form-control form-control-sm" min="0"
+                   value="{{ item.buy_price if item else 0 }}">
+          </div>
+          <div class="col-4">
+            <label class="form-label">Sell Price (UGX)</label>
+            <input type="number" name="sell_price" class="form-control form-control-sm" min="0"
+                   value="{{ item.sell_price if item else 0 }}">
+          </div>
+          <div class="col-8">
+            <label class="form-label">Supplier ID</label>
+            <input type="text" name="supplier_id" class="form-control form-control-sm font-monospace"
+                   value="{{ item.supplier_id if item else '' }}" placeholder="SUP-...">
+          </div>
+          <div class="col-12">
+            <label class="form-label">Notes</label>
+            <textarea name="notes" class="form-control form-control-sm" rows="2">{{ item.notes if item else '' }}</textarea>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="d-flex gap-2 mt-3">
+      <button type="submit" class="btn btn-success"><i class="bi bi-check2-circle"></i> Save</button>
+      <a href="{{ url_for('catalog_list') }}" class="btn btn-outline-secondary">Cancel</a>
+    </div>
+  </div>
+</div>
+</form>
+{% endblock %}

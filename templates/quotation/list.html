@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Quotations{% endblock %}
+{% block breadcrumb %}Quotations{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h5 class="mb-0">Quotations</h5>
+  <a href="{{ url_for('quotations_new') }}" class="btn btn-primary btn-sm">
+    <i class="bi bi-plus"></i> New
+  </a>
+</div>
+
+{# Filters #}
+<form method="get" class="row g-2 mb-3">
+  <div class="col-auto">
+    <input type="text" name="q" class="form-control form-control-sm" placeholder="Search customer / no." value="{{ search }}">
+  </div>
+  <div class="col-auto">
+    <select name="status" class="form-select form-select-sm">
+      <option value="">All statuses</option>
+      {% for s in ['Pending','Approved','In Progress','Completed','Cancelled'] %}
+      <option value="{{ s }}" {% if status==s %}selected{% endif %}>{{ s }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-auto">
+    <button type="submit" class="btn btn-sm btn-outline-secondary">Filter</button>
+    <a href="{{ url_for('quotations_list') }}" class="btn btn-sm btn-outline-secondary ms-1">Clear</a>
+  </div>
+</form>
+
+<div class="card">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead>
+          <tr>
+            <th>No.</th><th>Customer</th><th>Phone</th>
+            <th class="text-end">Amount (UGX)</th><th>Job Status</th><th>Payment</th><th>Date</th><th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for q in quotations %}
+          <tr>
+            <td><a href="{{ url_for('quotations_view', qid=q.id) }}" class="text-blue text-decoration-none">{{ q.quotation_no }}</a></td>
+            <td>{{ q.customer_name }}</td>
+            <td class="text-muted small">{{ q.customer_phone }}</td>
+            <td class="text-end money">{{ '{:,.0f}'.format(q.total_amount or 0) }}</td>
+            <td>
+              {% set s = q.status %}
+              <span class="badge {% if s=='Pending' %}badge-pending{% elif s=='Approved' %}badge-approved{% elif s=='In Progress' %}badge-in-progress{% elif s=='Completed' %}badge-completed{% else %}badge-cancelled{% endif %}">{{ s }}</span>
+            </td>
+            <td>
+              {% set paid = q.paid or 0 %}
+              {% set total = q.total_amount or 0 %}
+              {% if q.status == 'Cancelled' %}
+                <span class="badge badge-cancelled">Cancelled</span>
+              {% elif paid <= 0 %}
+                <span class="badge bg-danger bg-opacity-20 text-danger">Unpaid</span>
+              {% elif paid < total %}
+                <span class="badge bg-warning bg-opacity-25 text-warning">Partial</span>
+                <div class="text-muted" style="font-size:.65rem">{{ '{:,.0f}'.format(total - paid) }} due</div>
+              {% else %}
+                <span class="badge bg-success bg-opacity-20 text-success">Paid</span>
+              {% endif %}
+            </td>
+            <td class="text-muted small">{{ q.date }}</td>
+            <td class="text-end">
+              <a href="{{ url_for('quotations_edit', qid=q.id) }}" class="btn btn-sm btn-outline-secondary py-0 px-2"><i class="bi bi-pencil"></i></a>
+              <a href="{{ url_for('quotations_pdf', qid=q.id) }}" class="btn btn-sm btn-outline-secondary py-0 px-2" title="PDF"><i class="bi bi-file-pdf"></i></a>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="7" class="text-center text-muted py-4">No quotations found.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

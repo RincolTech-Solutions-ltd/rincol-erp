@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+{% block title %}{{ q.quotation_no }}{% endblock %}
+{% block breadcrumb %}
+  <a href="{{ url_for('quotations_list') }}" class="text-muted text-decoration-none">Quotations</a>
+  &rsaquo; {{ q.quotation_no }}
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
+  <div>
+    <h5 class="mb-0">{{ q.quotation_no }} — {{ q.customer_name }}</h5>
+    <div class="d-flex align-items-center gap-2 mt-1">
+      <div class="text-muted small">{{ q.date }}</div>
+      {# Payment status badge — computed from paid/balance passed by route #}
+      {% if q.status == 'Cancelled' %}
+        <span class="badge badge-cancelled">Cancelled</span>
+      {% elif paid <= 0 %}
+        <span class="badge bg-danger bg-opacity-20 text-danger">Unpaid</span>
+      {% elif balance > 0 %}
+        <span class="badge bg-warning bg-opacity-25 text-warning">Partially Paid</span>
+        <span class="text-muted small">UGX {{ '{:,.0f}'.format(balance) }} outstanding</span>
+      {% else %}
+        <span class="badge bg-success bg-opacity-20 text-success">Fully Paid</span>
+      {% endif %}
+    </div>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    {# Status changer #}
+    <form method="post" action="{{ url_for('quotations_status', qid=q.id) }}" class="d-flex gap-1">
+      <select name="status" class="form-select form-select-sm" style="width:auto">
+        {% for s in ['Pending','Approved','In Progress','Completed','Cancelled'] %}
+        <option value="{{ s }}" {% if q.status==s %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+      <button class="btn btn-sm btn-outline-secondary">Update</button>
+    </form>
+    <a href="{{ url_for('quotations_edit', qid=q.id) }}" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-pencil"></i> Edit
+    </a>
+    <a href="{{ url_for('quotations_pdf', qid=q.id) }}" class="btn btn-sm btn-outline-danger">
+      <i class="bi bi-file-pdf"></i> PDF
+    </a>
+  </div>
+</div>
+
+<div class="row g-3">
+  {# ── Left: items + payments ───────────────────────────────────────────── #}
+  <div class="col-lg-8">
+    {# Line items #}
+    <div class="card mb-3">
+      <div class="card-header"><span class="section-header mb-0">Line Items</span></div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-sm mb-0">
+            <thead>
+              <tr><th>#</th><th>Description</th><th>UOM</th><th>Qty</th><th class="text-end">Unit Price</th><th class="text-end">Total</th></tr>
+            </thead>
+            <tbody>
+              {% for it in items %}
+              <tr>
+                <td class="text-muted">{{ it.line_no }}</td>
+                <td>{{ it.description }}</td>
+                <td>{{ it.uom }}</td>
+                <td>{{ it.qty }}</td>
+                <td class="text-end money">{{ '{:,.0f}'.format(it.unit_price) }}</td>
+                <td class="text-end money text-green">{{ '{:,.0f}'.format(it.total) }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+            <tfoot>
+              {% if q.vat_rate %}
+              {% set subtotal = (q.total_amount or 0) / (1 + q.vat_rate / 100) %}
+              {% set vat_amt  = (q.total_amount or 0) - subtotal %}
+              <tr>
+                <td colspan="5" class="text-end text-muted small pe-3 py-1">Subtotal</td>
+                <td class="text-end text-muted small money py-1">UGX {{ '{:,.0f}'.format(subtotal) }}</td>
+              </tr>
+              <tr>
+                <td colspan="5" class="text-end text-muted small pe-3 py-1">VAT ({{ '%g' % q.vat_rate }}%)</td>
+                <td class="text-end text-muted small money py-1">UGX {{ '{:,.0f}'.format(vat_amt) }}</td>
+              </tr>
+              {% endif %}
+              <tr class="grand-total-row">
+                <td colspan="5" class="grand-total-label pe-3 py-2">GRAND TOTAL</td>
+                <td class="text-end grand-total-value money py-2">UGX {{ '{:,.0f}'.format(q.total_amount or 0) }}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    {# Receipts / Payment History #}
+    <div class="card mb-3">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span class="section-header mb-0">Payment History</span>
+        <div class="d-flex align-items-center gap-3">
+          <span class="small">
+            Paid: <strong class="text-green money">UGX {{ '{:,.0f}'.format(paid) }}</strong>
+            &nbsp;|&nbsp;
+            Balance: <strong class="{% if balance > 0 %}text-danger{% else %}text-green{% endif %} money">UGX {{ '{:,.0f}'.format(balance) }}</strong>
+          </span>
+          <a href="{{ url_for('receipts_new') }}?qid={{ q.id }}" class="btn btn-sm btn-success">
+            <i class="bi bi-plus"></i> New Receipt
+          </a>
+        </div>
+      </div>
+      <div class="card-body p-0">
+        {% if receipts %}
+        <table class="table table-sm mb-0">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Receipt No.</th>
+              <th>Collected By</th>
+              <th>Being For</th>
+              <th class="text-end">Amount Paid</th>
+              <th class="text-end">Balance</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in receipts %}
+            <tr>
+              <td class="text-muted small">{{ r.date }}</td>
+              <td><a href="{{ url_for('receipts_view', rid=r.id) }}" class="text-blue">{{ r.receipt_no }}</a></td>
+              <td>
+                <span class="badge {% if r.collected_by == 'Dennis' %}bg-warning bg-opacity-25 text-warning{% else %}bg-primary bg-opacity-25 text-blue{% endif %}">
+                  {{ r.collected_by or 'Hillary' }}
+                </span>
+              </td>
+              <td class="small text-muted">{{ r.being_for or '—' }}</td>
+              <td class="text-end money text-green">{{ '{:,.0f}'.format(r.amount_paid) }}</td>
+              <td class="text-end money {% if r.balance > 0 %}text-danger{% else %}text-green{% endif %}">{{ '{:,.0f}'.format(r.balance) }}</td>
+              <td>
+                <a href="{{ url_for('receipts_pdf', rid=r.id) }}" class="btn btn-sm btn-outline-danger py-0 px-1" title="PDF">
+                  <i class="bi bi-file-pdf"></i>
+                </a>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <div class="text-muted small p-3">No receipts recorded yet. Click "New Receipt" to record a payment.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  {# ── Right: details + executions ──────────────────────────────────────── #}
+  <div class="col-lg-4">
+    {# Details #}
+    <div class="card mb-3">
+      <div class="card-header"><span class="section-header mb-0">Details</span></div>
+      <div class="card-body p-0">
+        <table class="table table-sm mb-0">
+          <tbody>
+            <tr><td class="text-muted small">Delivery</td><td class="small">{{ q.delivery }}</td></tr>
+            <tr><td class="text-muted small">Validity</td><td class="small">{{ q.validity }}</td></tr>
+            <tr><td class="text-muted small">Warranty</td><td class="small">{{ q.warranty }}</td></tr>
+            <tr><td class="text-muted small">Payment</td><td class="small">{{ q.payment_terms }}</td></tr>
+            {% if q.customer_phone %}<tr><td class="text-muted small">Phone</td><td class="small">{{ q.customer_phone }}</td></tr>{% endif %}
+            {% if q.customer_email %}<tr><td class="text-muted small">Email</td><td class="small">{{ q.customer_email }}</td></tr>{% endif %}
+            {% if q.notes %}<tr><td class="text-muted small">Notes</td><td class="small">{{ q.notes }}</td></tr>{% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    {# Executions — one record per job, editable in place #}
+    {% set exe = execs[0] if execs else None %}
+    <div class="card">
+      <div class="card-header"><span class="section-header mb-0">Job Execution</span></div>
+      <div class="card-body">
+        <form method="post" action="{{ url_for('executions_add', qid=q.id) }}" class="row g-2">
+          <div class="col-12">
+            <label class="form-label">Executor Name</label>
+            <input type="text" name="executor_name" class="form-control form-control-sm" required
+                   placeholder="e.g. Dennis"
+                   value="{{ exe.executor_name if exe else '' }}">
+          </div>
+          <div class="col-6">
+            <label class="form-label">Date</label>
+            <input type="date" name="execution_date" class="form-control form-control-sm"
+                   value="{{ exe.execution_date if exe else '' }}">
+          </div>
+          <div class="col-6">
+            <label class="form-label">Pay (UGX)</label>
+            <input type="number" name="executor_payment" class="form-control form-control-sm" min="0" step="any"
+                   value="{{ exe.executor_payment if exe else 0 }}">
+          </div>
+          <div class="col-12">
+            <label class="form-label">Notes</label>
+            <input type="text" name="notes" class="form-control form-control-sm"
+                   value="{{ exe.notes if exe else '' }}">
+          </div>
+          <div class="col-12">
+            <button type="submit" class="btn btn-sm btn-outline-secondary w-100">
+              {% if exe %}<i class="bi bi-pencil"></i> Update Execution{% else %}<i class="bi bi-plus"></i> Save Execution{% endif %}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

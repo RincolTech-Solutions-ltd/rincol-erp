@@ -1,0 +1,20 @@
+# fly.toml — Rincol Web ERP
+# Run: flyctl launch (first time) or flyctl deploy
+
+app = "rincol-erp"
+primary_region = "jnb"   # Johannesburg — closest to Kampala
+
+[build]
+  dockerfile = "Dockerfile"
+
+[http_service]
+  internal_port = 8080
+  force_https   = true
+  auto_stop_machines  = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+[[vm]]
+  memory = "256mb"
+  cpu_kind = "shared"
+  cpus = 1

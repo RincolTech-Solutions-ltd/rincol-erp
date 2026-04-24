@@ -1,0 +1,254 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block breadcrumb %}Dashboard{% endblock %}
+
+{% block content %}
+{# ── Stat cards ────────────────────────────────────────────────────────────── #}
+<div class="row g-3 mb-4">
+  <div class="col-6 col-lg-3">
+    <div class="stat-card" style="background:rgba(137,180,250,.1);border:1px solid rgba(137,180,250,.2)">
+      <div class="d-flex justify-content-between align-items-start">
+        <div>
+          <div class="stat-label">Total Quotations</div>
+          <div class="stat-value text-blue">{{ stats.quotations }}</div>
+        </div>
+        <i class="bi bi-file-earmark-text stat-icon text-blue"></i>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="stat-card" style="background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.2)">
+      <div class="d-flex justify-content-between align-items-start">
+        <div>
+          <div class="stat-label">Pending</div>
+          <div class="stat-value" style="color:#fbbf24">{{ stats.pending }}</div>
+        </div>
+        <i class="bi bi-hourglass-split stat-icon" style="color:#fbbf24"></i>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="stat-card" style="background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.2)">
+      <div class="d-flex justify-content-between align-items-start">
+        <div>
+          <div class="stat-label">Outstanding (UGX)</div>
+          <div class="stat-value money" style="color:#f87171;font-size:1.2rem">{{ '{:,.0f}'.format(stats.outstanding) }}</div>
+        </div>
+        <i class="bi bi-cash-coin stat-icon" style="color:#f87171"></i>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="stat-card" style="background:rgba(166,227,161,.1);border:1px solid rgba(166,227,161,.2)">
+      <div class="d-flex justify-content-between align-items-start">
+        <div>
+          <div class="stat-label">Open Maintenance</div>
+          <div class="stat-value text-green">{{ stats.maintenance }}</div>
+        </div>
+        <i class="bi bi-tools stat-icon text-green"></i>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ── Active Jobs ───────────────────────────────────────────────────────────── #}
+{% if active_jobs %}
+<div class="card mb-3">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span class="section-header mb-0">Active Jobs</span>
+    <span class="badge bg-warning text-dark">{{ active_jobs | length }}</span>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0" id="tbl-active">
+        <thead>
+          <tr><th>No.</th><th>Customer</th><th>Amount (UGX)</th><th>Status</th><th>Executor</th><th>Date</th><th></th></tr>
+        </thead>
+        <tbody>
+          {% for j in active_jobs %}
+          <tr>
+            <td><a href="{{ url_for('quotations_view', qid=j.id) }}" class="text-blue text-decoration-none">{{ j.quotation_no }}</a></td>
+            <td>{{ j.customer_name }}</td>
+            <td class="money small">{{ '{:,.0f}'.format(j.total_amount or 0) }}</td>
+            <td>
+              {% set s = j.status %}
+              <span class="badge {% if s=='Approved' %}badge-approved{% else %}badge-in-progress{% endif %}">{{ s }}</span>
+            </td>
+            <td class="text-muted small">{{ j.executor_name or '—' }}</td>
+            <td class="text-muted small">{{ j.date }}</td>
+            <td>
+              <a href="{{ url_for('maintenance_new') }}?qid={{ j.id }}" class="btn btn-outline-secondary btn-sm py-0" title="Log maintenance">
+                <i class="bi bi-tools"></i>
+              </a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="card-footer py-1 px-3" id="pg-active"></div>
+</div>
+{% endif %}
+
+{# ── Completed — Needs Balancing ───────────────────────────────────────────── #}
+{% if unbalanced_jobs %}
+<div class="card mb-3" style="border-color:rgba(251,191,36,.35)">
+  <div class="card-header d-flex justify-content-between align-items-center" style="background:rgba(251,191,36,.07)">
+    <span class="section-header mb-0" style="color:#fbbf24">
+      <i class="bi bi-calculator me-1"></i> Completed — Needs Balancing
+    </span>
+    <span class="badge bg-warning text-dark">{{ unbalanced_jobs | length }}</span>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0" id="tbl-unbalanced">
+        <thead>
+          <tr><th>No.</th><th>Customer</th><th>Amount (UGX)</th><th>Executor</th><th>Completed</th><th></th></tr>
+        </thead>
+        <tbody>
+          {% for j in unbalanced_jobs %}
+          <tr>
+            <td><a href="{{ url_for('quotations_view', qid=j.id) }}" class="text-blue text-decoration-none">{{ j.quotation_no }}</a></td>
+            <td>{{ j.customer_name }}</td>
+            <td class="money small">{{ '{:,.0f}'.format(j.total_amount or 0) }}</td>
+            <td class="text-muted small">{{ j.executor_name or '—' }}</td>
+            <td class="text-muted small">{{ j.execution_date or j.date }}</td>
+            <td>
+              <a href="{{ url_for('balancing_edit') }}?qid={{ j.id }}" class="btn btn-sm btn-warning text-dark py-0">
+                <i class="bi bi-calculator"></i> Balance
+              </a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="card-footer py-1 px-3" id="pg-unbalanced"></div>
+</div>
+{% endif %}
+
+{# ── Recent Quotations ─────────────────────────────────────────────────────── #}
+<div class="card mb-3">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span class="section-header mb-0">Recent Quotations</span>
+    <a href="{{ url_for('quotations_new') }}" class="btn btn-primary btn-sm">
+      <i class="bi bi-plus"></i> New Quotation
+    </a>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0" id="tbl-recent">
+        <thead>
+          <tr><th>No.</th><th>Customer</th><th>Amount (UGX)</th><th>Status</th><th>Date</th></tr>
+        </thead>
+        <tbody>
+          {% for r in recent %}
+          <tr>
+            <td><a href="{{ url_for('quotations_view', qid=r.id) }}" class="text-blue text-decoration-none">{{ r.quotation_no }}</a></td>
+            <td>{{ r.customer_name }}</td>
+            <td class="money small">{{ '{:,.0f}'.format(r.total_amount or 0) }}</td>
+            <td>
+              {% set s = r.status %}
+              <span class="badge {% if s=='Pending' %}badge-pending{% elif s=='Approved' %}badge-approved{% elif s=='In Progress' %}badge-in-progress{% elif s=='Completed' %}badge-completed{% else %}badge-cancelled{% endif %}">{{ s }}</span>
+            </td>
+            <td class="text-muted small">{{ r.date }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" class="text-center text-muted py-4">No quotations yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="card-footer py-1 px-3" id="pg-recent"></div>
+</div>
+
+{# ── Quick actions ─────────────────────────────────────────────────────────── #}
+<div class="row g-3 mt-1">
+  <div class="col-md-4">
+    <a href="{{ url_for('quotations_new') }}" class="card text-decoration-none h-100">
+      <div class="card-body text-center py-4">
+        <i class="bi bi-file-earmark-plus fs-2 text-blue mb-2 d-block"></i>
+        <div class="fw-semibold">New Quotation</div>
+      </div>
+    </a>
+  </div>
+  <div class="col-md-4">
+    <a href="{{ url_for('receipts_new') }}" class="card text-decoration-none h-100">
+      <div class="card-body text-center py-4">
+        <i class="bi bi-receipt fs-2 text-green mb-2 d-block"></i>
+        <div class="fw-semibold">New Receipt</div>
+      </div>
+    </a>
+  </div>
+  <div class="col-md-4">
+    <a href="{{ url_for('maintenance_new') }}" class="card text-decoration-none h-100">
+      <div class="card-body text-center py-4">
+        <i class="bi bi-tools fs-2 mb-2 d-block" style="color:#a78bfa"></i>
+        <div class="fw-semibold">Log Maintenance</div>
+      </div>
+    </a>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const PAGE_SIZE = 5;
+
+  function paginate(tableId, pgContainerId) {
+    const tbody = document.querySelector('#' + tableId + ' tbody');
+    if (!tbody) return;
+    const rows = Array.from(tbody.querySelectorAll('tr'));
+    if (rows.length <= PAGE_SIZE) return; // no pagination needed
+
+    const container = document.getElementById(pgContainerId);
+    let current = 1;
+    const total = Math.ceil(rows.length / PAGE_SIZE);
+
+    function show(page) {
+      current = page;
+      rows.forEach((r, i) => {
+        r.style.display = (i >= (page-1)*PAGE_SIZE && i < page*PAGE_SIZE) ? '' : 'none';
+      });
+      render();
+    }
+
+    function render() {
+      // Build page number list: always show 1, last, and ±2 around current
+      const pages = new Set([1, total]);
+      for (let p = Math.max(1, current-2); p <= Math.min(total, current+2); p++) pages.add(p);
+      const sorted = Array.from(pages).sort((a,b) => a-b);
+
+      let html = '<nav class="d-flex align-items-center gap-1">';
+      // Prev
+      html += `<button class="btn btn-sm btn-outline-secondary py-0 px-2" ${current===1?'disabled':''} data-p="${current-1}">‹</button>`;
+      let prev = 0;
+      sorted.forEach(p => {
+        if (p - prev > 1) html += `<span class="text-muted px-1" style="font-size:.8rem">…</span>`;
+        html += `<button class="btn btn-sm py-0 px-2 ${p===current?'btn-primary':'btn-outline-secondary'}" data-p="${p}">${p}</button>`;
+        prev = p;
+      });
+      // Next
+      html += `<button class="btn btn-sm btn-outline-secondary py-0 px-2" ${current===total?'disabled':''} data-p="${current+1}">›</button>`;
+      html += `<span class="text-muted ms-2" style="font-size:.75rem">${rows.length} total</span>`;
+      html += '</nav>';
+
+      container.innerHTML = html;
+      container.querySelectorAll('button[data-p]').forEach(btn => {
+        btn.addEventListener('click', () => show(parseInt(btn.dataset.p)));
+      });
+    }
+
+    show(1);
+  }
+
+  paginate('tbl-active',      'pg-active');
+  paginate('tbl-unbalanced',  'pg-unbalanced');
+  paginate('tbl-recent',      'pg-recent');
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,270 @@
+{% extends "base.html" %}
+{% block title %}{% if q %}Edit Quotation{% else %}New Quotation{% endif %}{% endblock %}
+{% block breadcrumb %}
+  <a href="{{ url_for('quotations_list') }}" class="text-muted text-decoration-none">Quotations</a>
+  &rsaquo; {% if q %}Edit {{ q.quotation_no }}{% else %}New{% endif %}
+{% endblock %}
+
+{% block content %}
+<script>
+window.CATALOG_ITEMS = {{ catalog | tojson }};
+</script>
+<form method="post" id="quotation-form">
+<div class="row g-4">
+
+  {# ── Left column: customer + terms ────────────────────────────────────── #}
+  <div class="col-lg-4">
+
+    {# Quick Build #}
+    {% if templates %}
+    <div class="card mb-3">
+      <div class="card-header"><span class="section-header mb-0">⚡ Quick Build</span></div>
+      <div class="card-body">
+        <div class="mb-2">
+          <label class="form-label">System Template</label>
+          <select id="template-select" class="form-select form-select-sm">
+            <option value="">— Select template —</option>
+            {% for t in templates %}
+            <option value="{{ t.id }}">{{ t.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button type="button" id="load-template-btn" class="btn btn-sm btn-primary w-100">
+          Load Template
+        </button>
+      </div>
+    </div>
+    {% endif %}
+
+    {# Quotation meta #}
+    <div class="card mb-3">
+      <div class="card-header"><span class="section-header mb-0">Quotation Details</span></div>
+      <div class="card-body">
+        <div class="row g-2">
+          <div class="col-7">
+            <label class="form-label">Title</label>
+            <input type="text" name="title" class="form-control form-control-sm"
+                   value="{{ q.title if q else 'Quotation' }}">
+          </div>
+          <div class="col-5">
+            <label class="form-label">Status</label>
+            <select name="status" class="form-select form-select-sm">
+              {% for s in ['Pending','Approved','In Progress','Completed','Cancelled'] %}
+              <option value="{{ s }}" {% if (q and q.status==s) or (not q and s=='Pending') %}selected{% endif %}>{{ s }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-7">
+            <label class="form-label">Quotation No.</label>
+            <input type="text" name="quotation_no" class="form-control form-control-sm"
+                   value="{{ q.quotation_no if q else qno }}">
+          </div>
+          <div class="col-5">
+            <label class="form-label">Date</label>
+            <input type="date" name="date" class="form-control form-control-sm"
+                   value="{{ q.date if q else '' }}">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {# Customer #}
+    <div class="card mb-3">
+      <div class="card-header"><span class="section-header mb-0">Customer</span></div>
+      <div class="card-body">
+        <div class="mb-2">
+          <label class="form-label">Name *</label>
+          <input type="text" name="customer_name" class="form-control form-control-sm" required
+                 value="{{ q.customer_name if q else '' }}">
+        </div>
+        <div class="mb-2">
+          <label class="form-label">Phone</label>
+          <input type="text" name="customer_phone" class="form-control form-control-sm"
+                 value="{{ q.customer_phone if q else '' }}">
+        </div>
+        <div class="mb-2">
+          <label class="form-label">Email</label>
+          <input type="email" name="customer_email" class="form-control form-control-sm"
+                 value="{{ q.customer_email if q else '' }}">
+        </div>
+        <div>
+          <label class="form-label">Address</label>
+          <input type="text" name="customer_address" class="form-control form-control-sm"
+                 value="{{ q.customer_address if q else '' }}">
+        </div>
+      </div>
+    </div>
+
+    {# Terms #}
+    <div class="card mb-3">
+      <div class="card-header"><span class="section-header mb-0">Terms</span></div>
+      <div class="card-body">
+        <div class="mb-2">
+          <label class="form-label">Delivery</label>
+          <input type="text" name="delivery" class="form-control form-control-sm"
+                 value="{{ q.delivery if q else '1-2 days after 70% material cost payment' }}">
+        </div>
+        <div class="mb-2">
+          <label class="form-label">Validity</label>
+          <input type="text" name="validity" class="form-control form-control-sm"
+                 value="{{ q.validity if q else '30 days' }}">
+        </div>
+        <div class="mb-2">
+          <label class="form-label">Warranty</label>
+          <input type="text" name="warranty" class="form-control form-control-sm"
+                 value="{{ q.warranty if q else '12 months commencing on the delivery date' }}">
+        </div>
+        <div class="mb-2">
+          <label class="form-label">Payment Terms</label>
+          <input type="text" name="payment_terms" class="form-control form-control-sm"
+                 value="{{ q.payment_terms if q else 'Cash / MM / EFT' }}">
+        </div>
+        <div>
+          <label class="form-label">Notes</label>
+          <textarea name="notes" class="form-control form-control-sm" rows="2">{{ q.notes if q else '' }}</textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="d-grid gap-2">
+      <button type="submit" class="btn btn-success">
+        <i class="bi bi-check2-circle"></i> Save Quotation
+      </button>
+      {% if q %}
+      <a href="{{ url_for('quotations_view', qid=q.id) }}" class="btn btn-outline-secondary">Cancel</a>
+      {% else %}
+      <a href="{{ url_for('quotations_list') }}" class="btn btn-outline-secondary">Cancel</a>
+      {% endif %}
+    </div>
+
+  </div>{# end left col #}
+
+  {# ── Right column: line items ──────────────────────────────────────────── #}
+  <div class="col-lg-8">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span class="section-header mb-0">Line Items</span>
+        <button type="button" id="add-row-btn" class="btn btn-sm btn-outline-secondary">
+          <i class="bi bi-plus"></i> Add Row
+        </button>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive-resizable">
+          <table id="line-items-table" class="table table-sm table-resizable mb-0">
+            <colgroup>
+              <col style="width:24px">
+              <col style="width:40px">
+              <col style="width:auto">
+              <col style="width:70px">
+              <col style="width:70px">
+              <col style="width:120px">
+              <col style="width:110px">
+              <col style="width:36px">
+            </colgroup>
+            <thead>
+              <tr>
+                <th></th>
+                <th>#</th>
+                <th>Description</th>
+                <th>UOM</th>
+                <th>Qty</th>
+                <th>Unit Price</th>
+                <th>Total</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="items-tbody">
+              {% if items %}
+                {% for it in items %}
+                <tr draggable="true">
+                  <td class="drag-handle">⠿</td>
+                  <td class="col-no td-no">{{ it.line_no }}</td>
+                  <td><input type="text" name="desc[]" class="col-desc" value="{{ it.description }}"></td>
+                  <td>
+                    <select name="uom[]" class="col-uom">
+                      {% for u in ['pc','lot','job','m','roll','set','pair','box'] %}
+                      <option value="{{ u }}" {% if it.uom==u %}selected{% endif %}>{{ u }}</option>
+                      {% endfor %}
+                    </select>
+                  </td>
+                  <td><input type="number" name="qty[]" class="col-qty" value="{{ it.qty }}" min="0.01" step="any"></td>
+                  <td><input type="number" name="price[]" class="col-price" value="{{ it.unit_price }}" min="0" step="any"></td>
+                  <td class="col-total td-total" data-value="{{ it.total }}">{{ '{:,.0f}'.format(it.total) }}</td>
+                  <td class="text-center">
+                    <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1 remove-row-btn"><i class="bi bi-x"></i></button>
+                  </td>
+                </tr>
+                {% endfor %}
+              {% else %}
+                {# Start with 3 blank rows for new quotation #}
+                {% for _ in range(3) %}
+                <tr draggable="true">
+                  <td class="drag-handle">⠿</td>
+                  <td class="col-no td-no">{{ loop.index }}</td>
+                  <td><input type="text" name="desc[]" class="col-desc" value=""></td>
+                  <td>
+                    <select name="uom[]" class="col-uom">
+                      {% for u in ['pc','lot','job','m','roll','set','pair','box'] %}
+                      <option value="{{ u }}">{{ u }}</option>
+                      {% endfor %}
+                    </select>
+                  </td>
+                  <td><input type="number" name="qty[]" class="col-qty" value="1" min="0.01" step="any"></td>
+                  <td><input type="number" name="price[]" class="col-price" value="0" min="0" step="any"></td>
+                  <td class="col-total td-total" data-value="0">0</td>
+                  <td class="text-center">
+                    <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1 remove-row-btn"><i class="bi bi-x"></i></button>
+                  </td>
+                </tr>
+                {% endfor %}
+              {% endif %}
+            </tbody>
+            <tfoot>
+              <tr id="subtotal-row" style="display:none">
+                <td colspan="6" class="text-end text-muted small pe-2 py-1">Subtotal</td>
+                <td class="text-end text-muted small money py-1" id="subtotal-display">UGX 0</td>
+                <td></td>
+              </tr>
+              <tr id="vat-row" style="display:none">
+                <td colspan="5" class="text-end text-muted small pe-2 py-1">VAT</td>
+                <td class="py-1 pe-1">
+                  <div class="d-flex align-items-center justify-content-end gap-1">
+                    <input type="number" id="vat-pct" name="vat_rate"
+                           class="form-control form-control-sm text-end"
+                           style="width:58px" min="0" max="100" step="0.1"
+                           value="{{ q.vat_rate if q and q.vat_rate else 18 }}">
+                    <span class="text-muted small">%</span>
+                  </div>
+                </td>
+                <td class="text-end text-muted small money py-1" id="vat-display">UGX 0</td>
+                <td></td>
+              </tr>
+              <tr class="grand-total-row">
+                <td colspan="6" class="pe-3">
+                  <div class="d-flex align-items-center justify-content-between">
+                    <input type="hidden" name="apply_vat" id="apply-vat-hidden" value="{{ '1' if q and q.vat_rate else '0' }}">
+                    <button type="button" id="vat-toggle-btn"
+                            class="btn btn-sm {% if q and q.vat_rate %}btn-outline-danger{% else %}btn-outline-secondary{% endif %} py-0 px-2">
+                      {% if q and q.vat_rate %}
+                        <i class="bi bi-dash"></i> Remove VAT
+                      {% else %}
+                        <i class="bi bi-plus"></i> Add VAT
+                      {% endif %}
+                    </button>
+                    <span class="grand-total-label">GRAND TOTAL</span>
+                  </div>
+                </td>
+                <td colspan="2">
+                  <span id="grand-total" class="grand-total-value money fs-6">UGX 0</span>
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>{# end row #}
+</form>
+{% endblock %}

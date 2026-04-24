@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+{% block title %}{% if r %}Edit Maintenance{% else %}Log Maintenance Visit{% endif %}{% endblock %}
+{% block breadcrumb %}
+  <a href="{{ url_for('maintenance_list') }}" class="text-muted text-decoration-none">Maintenance</a>
+  {% if r %}&rsaquo; <a href="{{ url_for('maintenance_view', mid=r.id) }}" class="text-muted text-decoration-none">{{ r.client_name }}</a>{% endif %}
+  &rsaquo; {% if r %}Edit{% else %}New{% endif %}
+{% endblock %}
+
+{% block content %}
+<form method="post">
+<div class="row g-4 justify-content-center">
+  <div class="col-lg-8">
+
+    {# ── Step 1: Linked Quotation ─────────────────────────────────────── #}
+    <div class="card mb-3">
+      <div class="card-header"><span class="section-header mb-0">Linked Quotation</span></div>
+      <div class="card-body">
+        <label class="form-label">Select Quotation <span class="text-muted">(optional — auto-fills client details)</span></label>
+        <select name="linked_quotation_id" id="maint_qid" class="form-select form-select-sm">
+          <option value="">— None —</option>
+          {% for q in quotations %}
+          <option value="{{ q.id }}"
+                  data-customer="{{ q.customer_name }}"
+                  data-phone="{{ q.customer_phone or '' }}"
+                  {% if (r and r.linked_quotation_id == q.id) or (not r and prefill_qid == q.id) %}selected{% endif %}>
+            {{ q.quotation_no }} — {{ q.customer_name }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    {# ── Step 2: Client (auto-filled, still editable) ─────────────────── #}
+    <div class="card mb-3">
+      <div class="card-header"><span class="section-header mb-0">Client</span></div>
+      <div class="card-body">
+        <div class="row g-2">
+          <div class="col-7">
+            <label class="form-label">Client Name *</label>
+            <input type="text" name="client_name" id="maint_client_name"
+                   class="form-control form-control-sm" required
+                   value="{{ r.client_name if r else '' }}">
+          </div>
+          <div class="col-5">
+            <label class="form-label">Phone</label>
+            <input type="text" name="client_phone" id="maint_client_phone"
+                   class="form-control form-control-sm"
+                   value="{{ r.client_phone if r else '' }}">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {# ── Visit Details ─────────────────────────────────────────────────── #}
+    <div class="card mb-3">
+      <div class="card-header"><span class="section-header mb-0">Visit Details</span></div>
+      <div class="card-body">
+        <div class="row g-2">
+          <div class="col-4">
+            <label class="form-label">Visit Date</label>
+            <input type="date" name="visit_date" class="form-control form-control-sm"
+                   value="{{ r.visit_date if r else '' }}">
+          </div>
+          <div class="col-4">
+            <label class="form-label">Type</label>
+            <select name="type" class="form-select form-select-sm">
+              {% for t in ['Paid','Warranty'] %}
+              <option value="{{ t }}" {% if r and r.type==t %}selected{% endif %}>{{ t }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-4">
+            <label class="form-label">Status</label>
+            <select name="status" class="form-select form-select-sm">
+              {% for s in ['Open','Resolved','Pending Parts'] %}
+              <option value="{{ s }}" {% if r and r.status==s %}selected{% endif %}>{{ s }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-12">
+            <label class="form-label">Problem Description</label>
+            <textarea name="problem" class="form-control form-control-sm" rows="2">{{ r.problem if r else '' }}</textarea>
+          </div>
+          <div class="col-12">
+            <label class="form-label">Parts Used</label>
+            <textarea name="parts_used" class="form-control form-control-sm" rows="2">{{ r.parts_used if r else '' }}</textarea>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {# ── Costs ────────────────────────────────────────────────────────── #}
+    <div class="card mb-3">
+      <div class="card-header"><span class="section-header mb-0">Costs</span></div>
+      <div class="card-body">
+        <div class="row g-2">
+          <div class="col-4">
+            <label class="form-label">Parts Cost (UGX)</label>
+            <input type="number" name="parts_cost" class="form-control form-control-sm" min="0" step="any"
+                   value="{{ r.parts_cost if r else 0 }}">
+          </div>
+          <div class="col-4">
+            <label class="form-label">Labour Fee (UGX)</label>
+            <input type="number" name="labour_fee" class="form-control form-control-sm" min="0" step="any"
+                   value="{{ r.labour_fee if r else 0 }}">
+          </div>
+          <div class="col-4">
+            <label class="form-label">Paid By</label>
+            <select name="paid_by" class="form-select form-select-sm">
+              {% for p in ['Hillary','Dennis'] %}
+              <option value="{{ p }}" {% if (r and r.paid_by==p) or (not r and p=='Hillary') %}selected{% endif %}>{{ p }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-12 mt-2">
+            <label class="form-label">Cost Split <span class="text-muted small">(who bears this cost)</span></label>
+            <div class="row g-2 align-items-center">
+              <div class="col-4">
+                <div class="input-group input-group-sm">
+                  <span class="input-group-text">Hillary</span>
+                  <input type="number" name="h_ratio" id="maint_h_ratio"
+                         class="form-control text-end" min="0" max="100"
+                         value="{{ r.h_ratio if r else 100 }}">
+                  <span class="input-group-text">%</span>
+                </div>
+              </div>
+              <div class="col-1 text-center text-muted">/</div>
+              <div class="col-4">
+                <div class="input-group input-group-sm">
+                  <span class="input-group-text">Dennis</span>
+                  <input type="number" name="d_ratio" id="maint_d_ratio"
+                         class="form-control text-end" min="0" max="100"
+                         value="{{ r.d_ratio if r else 0 }}">
+                  <span class="input-group-text">%</span>
+                </div>
+              </div>
+              <div class="col-3 text-muted small" id="maint_ratio_check"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {# ── Executor ─────────────────────────────────────────────────────── #}
+    <div class="card mb-3">
+      <div class="card-header"><span class="section-header mb-0">Executor</span></div>
+      <div class="card-body">
+        <div class="row g-2">
+          <div class="col-6">
+            <label class="form-label">Executor Name</label>
+            <input type="text" name="executor_name" class="form-control form-control-sm"
+                   value="{{ r.executor_name if r else '' }}" placeholder="e.g. Dennis">
+          </div>
+          <div class="col-6">
+            <label class="form-label">Executor Pay (UGX)</label>
+            <input type="number" name="executor_payment" class="form-control form-control-sm" min="0" step="any"
+                   value="{{ r.executor_payment if r else 0 }}">
+          </div>
+          <div class="col-12">
+            <label class="form-label">Notes</label>
+            <textarea name="notes" class="form-control form-control-sm" rows="2">{{ r.notes if r else '' }}</textarea>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="d-flex gap-2">
+      <button type="submit" class="btn btn-success"><i class="bi bi-check2-circle"></i> Save</button>
+      <a href="{{ url_for('maintenance_list') }}" class="btn btn-outline-secondary">Cancel</a>
+    </div>
+
+  </div>
+</div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const qSel      = document.getElementById('maint_qid');
+  const nameEl    = document.getElementById('maint_client_name');
+  const phoneEl   = document.getElementById('maint_client_phone');
+
+  function fillFromQuotation() {
+    const opt = qSel.options[qSel.selectedIndex];
+    if (!opt || !opt.value) return;
+    if (nameEl  && !nameEl.value.trim())  nameEl.value  = opt.dataset.customer || '';
+    if (phoneEl && !phoneEl.value.trim()) phoneEl.value = opt.dataset.phone    || '';
+  }
+
+  qSel?.addEventListener('change', fillFromQuotation);
+  if (qSel?.value) fillFromQuotation();
+
+  // Ratio sync (keep sum = 100)
+  const hR = document.getElementById('maint_h_ratio');
+  const dR = document.getElementById('maint_d_ratio');
+  const chk = document.getElementById('maint_ratio_check');
+  function syncRatio(changed, other) {
+    const v = parseInt(changed.value) || 0;
+    other.value = Math.max(0, 100 - v);
+    const sum = (parseInt(hR.value)||0) + (parseInt(dR.value)||0);
+    if (chk) chk.textContent = sum === 100 ? '' : `⚠ sum = ${sum}%`;
+  }
+  hR?.addEventListener('input', () => syncRatio(hR, dR));
+  dR?.addEventListener('input', () => syncRatio(dR, hR));
+})();
+</script>
+{% endblock %}

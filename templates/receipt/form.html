@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}{% if r %}Edit {{ r.receipt_no }}{% else %}New Receipt{% endif %}{% endblock %}
+{% block breadcrumb %}
+  <a href="{{ url_for('receipts_list') }}" class="text-muted text-decoration-none">Receipts</a>
+  &rsaquo; {% if r %}Edit {{ r.receipt_no }}{% else %}New{% endif %}
+{% endblock %}
+
+{% block content %}
+<form method="post" action="{% if r %}{{ url_for('receipts_edit', rid=r.id) }}{% endif %}">
+<div class="row g-4 justify-content-center">
+  <div class="col-lg-7">
+
+    <div class="card mb-3">
+      <div class="card-header"><span class="section-header mb-0">Receipt Details</span></div>
+      <div class="card-body">
+        <div class="row g-2">
+          <div class="col-6">
+            <label class="form-label">Receipt No.</label>
+            <input type="text" name="receipt_no" class="form-control form-control-sm" placeholder="e.g. RCT-2025-001">
+          </div>
+          <div class="col-6">
+            <label class="form-label">Date</label>
+            <input type="date" name="date" class="form-control form-control-sm">
+          </div>
+          <div class="col-12">
+            <label class="form-label">Linked Quotation <span class="text-muted">(optional)</span></label>
+            <select name="quotation_id" id="receipt_quotation_id" class="form-select form-select-sm">
+              <option value="">— None —</option>
+              {% for q in quotations %}
+              <option value="{{ q.id }}"
+                data-customer="{{ q.customer_name }}"
+                data-phone="{{ q.customer_phone or '' }}"
+                data-amount="{{ q.total_amount }}"
+                {% if (r and r.quotation_id==q.id) or (not r and prefill_qid==q.id) %}selected{% endif %}>
+                {{ q.quotation_no }} — {{ q.customer_name }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-header"><span class="section-header mb-0">Customer</span></div>
+      <div class="card-body">
+        <div class="row g-2">
+          <div class="col-7">
+            <label class="form-label">Name *</label>
+            <input type="text" name="customer_name" class="form-control form-control-sm" required>
+          </div>
+          <div class="col-5">
+            <label class="form-label">Phone</label>
+            <input type="text" name="customer_phone" class="form-control form-control-sm">
+          </div>
+          <div class="col-12">
+            <label class="form-label">Being payment for</label>
+            <input type="text" name="being_for" class="form-control form-control-sm" placeholder="e.g. Solar system installation">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-header"><span class="section-header mb-0">Amounts</span></div>
+      <div class="card-body">
+        <div class="row g-2 align-items-end">
+          <div class="col-5">
+            <label class="form-label">Invoice Total (UGX)</label>
+            <input type="number" name="amount_fig" id="amount_fig" class="form-control form-control-sm" min="0" step="any" value="0">
+          </div>
+          <div class="col-5">
+            <label class="form-label">Amount Paid (UGX)</label>
+            <input type="number" name="amount_paid" id="amount_paid" class="form-control form-control-sm" min="0" step="any" value="0">
+          </div>
+          <div class="col-2">
+            <div class="form-label">Balance</div>
+            <div id="balance_display" class="fw-bold money small text-green">UGX 0</div>
+          </div>
+        </div>
+        <div class="row g-2 mt-1">
+          <div class="col-6">
+            <label class="form-label">Cheque No. (if any)</label>
+            <input type="text" name="cheque_no" class="form-control form-control-sm">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-header"><span class="section-header mb-0">Collection &amp; Signatures</span></div>
+      <div class="card-body">
+        <div class="row g-2">
+          <div class="col-6">
+            <label class="form-label">Money Collected By</label>
+            <select name="collected_by" class="form-select form-select-sm">
+              <option value="Hillary" {% if not r or r.collected_by == 'Hillary' %}selected{% endif %}>Hillary</option>
+              <option value="Dennis"  {% if r and r.collected_by == 'Dennis' %}selected{% endif %}>Dennis</option>
+            </select>
+          </div>
+          <div class="col-6">
+            <label class="form-label">Issued By (signature name)</label>
+            <input type="text" name="issued_name" class="form-control form-control-sm"
+                   value="{{ r.issued_name if r else 'Hillary Arinda' }}">
+          </div>
+          <div class="col-6">
+            <label class="form-label">Received By (customer name)</label>
+            <input type="text" name="received_name" class="form-control form-control-sm"
+                   value="{{ r.received_name if r else '' }}">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="d-flex gap-2">
+      <button type="submit" class="btn btn-success"><i class="bi bi-check2-circle"></i> Save Receipt</button>
+      <a href="{% if r %}{{ url_for('receipts_view', rid=r.id) }}{% else %}{{ url_for('receipts_list') }}{% endif %}" class="btn btn-outline-secondary">Cancel</a>
+    </div>
+
+  </div>
+</div>
+</form>
+{% endblock %}

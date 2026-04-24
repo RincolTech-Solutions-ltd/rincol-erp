@@ -1,0 +1,245 @@
+{% extends "base.html" %}
+{% block title %}{% if job %}Edit Job{% else %}New Balancing Job{% endif %}{% endblock %}
+{% block breadcrumb %}
+  <a href="{{ url_for('balancing_list') }}" class="text-muted text-decoration-none">Balancing</a>
+  &rsaquo; {% if job %}Edit{% else %}New Job{% endif %}
+{% endblock %}
+
+{% block content %}
+{# Seed JS with existing spend lines (for edit) or empty list (for new) #}
+<script>
+window.EXISTING_SPEND = {{ existing_spend | tojson }};
+window.PREFILL = {{ prefill | tojson }};
+</script>
+
+<form method="post">
+<div class="row g-4 justify-content-center">
+  <div class="col-lg-7">
+
+    <div class="card mb-3">
+      <div class="card-header"><span class="section-header mb-0">Job Info</span></div>
+      <div class="card-body">
+        <div class="row g-2">
+          <div class="col-8">
+            <label class="form-label">Job Name *</label>
+            <input type="text" name="job_name" id="b_job_name" class="form-control form-control-sm" required
+                   value="{{ job.job_name if job else prefill.get('job_name','') }}"
+                   placeholder="e.g. Kalinaki Solar 5kVA">
+          </div>
+          <div class="col-4">
+            <label class="form-label">Date</label>
+            <input type="date" name="date" id="b_date" class="form-control form-control-sm"
+                   value="{{ job.date if job else prefill.get('date','') }}">
+          </div>
+          <div class="col-12">
+            <label class="form-label">Linked Quotation <span class="text-muted">(optional)</span></label>
+            <select name="linked_quotation_id" id="b_linked_qid" class="form-select form-select-sm">
+              <option value="">— None —</option>
+              {% for q in quotations %}
+              <option value="{{ q.id }}"
+                data-amount="{{ q.total_amount }}"
+                data-label="{{ q.customer_name }} — {{ q.quotation_no }}"
+                {% if (job and job.linked_quotation_id==q.id) or (not job and prefill.get('linked_quotation_id')==q.id) %}selected{% endif %}>
+                {{ q.quotation_no }} — {{ q.customer_name }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-header"><span class="section-header mb-0">Financials</span></div>
+      <div class="card-body">
+        <div class="row g-2">
+          <div class="col-12">
+            <label class="form-label">Quoted Amount (UGX) *</label>
+            <input type="number" name="quoted" id="b_quoted" class="form-control form-control-sm"
+                   min="0" step="any" required
+                   value="{{ job.quoted if job else prefill.get('quoted', 0) }}">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span class="section-header mb-0">Spend Lines</span>
+        <button type="button" class="btn btn-sm btn-outline-secondary" id="addSpendRow">
+          <i class="bi bi-plus"></i> Add Line
+        </button>
+      </div>
+      <div class="card-body p-0">
+        <table class="table table-sm mb-0" id="spendTable">
+          <thead class="table-dark">
+            <tr>
+              <th>Description</th>
+              <th style="width:110px">Paid By</th>
+              <th class="text-end" style="width:130px">Amount (UGX)</th>
+              <th style="width:36px"></th>
+            </tr>
+          </thead>
+          <tbody id="spendBody"></tbody>
+          <tfoot>
+            <tr>
+              <td colspan="2" class="text-end text-muted small pe-2">Total Costs</td>
+              <td class="text-end fw-bold money small" id="spend_total_display">UGX 0</td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-header"><span class="section-header mb-0">Profit Split</span></div>
+      <div class="card-body">
+        <div class="row g-3 align-items-center mb-3">
+          <div class="col-5">
+            <label class="form-label">Hillary %</label>
+            <input type="number" name="h_ratio" id="h_ratio" class="form-control form-control-sm"
+                   min="0" max="100" value="{{ job.h_ratio if job else 45 }}">
+          </div>
+          <div class="col-2 text-center pt-3 text-muted">/</div>
+          <div class="col-5">
+            <label class="form-label">Dennis %</label>
+            <input type="number" name="d_ratio" id="d_ratio" class="form-control form-control-sm"
+                   min="0" max="100" value="{{ job.d_ratio if job else 55 }}">
+          </div>
+        </div>
+        <div class="rounded p-3" style="background:rgba(255,255,255,.04);border:1px solid #2a2d45">
+          <div class="small text-muted mb-2">Live preview — updates as you enter costs above</div>
+          <div class="row text-center">
+            <div class="col-3">
+              <div class="section-header">Quoted</div>
+              <div id="prev_quoted" class="fw-bold money small">UGX 0</div>
+            </div>
+            <div class="col-3">
+              <div class="section-header">Profit</div>
+              <div id="prev_profit" class="fw-bold money small text-green">UGX 0</div>
+            </div>
+            <div class="col-3">
+              <div class="section-header">Hillary</div>
+              <div id="prev_h" class="fw-bold money small text-blue">UGX 0</div>
+            </div>
+            <div class="col-3">
+              <div class="section-header">Dennis</div>
+              <div id="prev_d" class="fw-bold money small" style="color:#a78bfa">UGX 0</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-header"><span class="section-header mb-0">Notes</span></div>
+      <div class="card-body">
+        <textarea name="notes" class="form-control form-control-sm" rows="2">{{ job.notes if job else '' }}</textarea>
+      </div>
+    </div>
+
+    <div class="d-flex gap-2">
+      <button type="submit" class="btn btn-success"><i class="bi bi-check2-circle"></i> Save &amp; Open Job</button>
+      <a href="{{ url_for('balancing_list') }}" class="btn btn-outline-secondary">Cancel</a>
+    </div>
+
+  </div>
+</div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const fmt = v => 'UGX ' + Math.round(v || 0).toLocaleString();
+
+  // ── Spend row management ──────────────────────────────────────────────────
+  function makeSpendRow(desc, paidBy, amount) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>
+        <input type="text" name="sl_desc[]" class="form-control form-control-sm"
+               value="${desc}" placeholder="e.g. Solar panels">
+      </td>
+      <td>
+        <select name="sl_paid_by[]" class="form-select form-select-sm">
+          <option value="Hillary" ${paidBy==='Hillary'?'selected':''}>Hillary</option>
+          <option value="Dennis"  ${paidBy==='Dennis' ?'selected':''}>Dennis</option>
+        </select>
+      </td>
+      <td>
+        <input type="number" name="sl_amount[]" class="form-control form-control-sm text-end sl-amount"
+               min="0" step="any" value="${amount || ''}">
+      </td>
+      <td>
+        <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1 remove-sl">
+          <i class="bi bi-x"></i>
+        </button>
+      </td>`;
+    tr.querySelector('.sl-amount').addEventListener('input', updatePreview);
+    tr.querySelector('.remove-sl').addEventListener('click', () => { tr.remove(); updatePreview(); });
+    return tr;
+  }
+
+  document.getElementById('addSpendRow').addEventListener('click', () => {
+    document.getElementById('spendBody').appendChild(makeSpendRow('', 'Hillary', ''));
+    updatePreview();
+  });
+
+  // ── Preview calculator ────────────────────────────────────────────────────
+  function updatePreview() {
+    const quoted = parseFloat(document.getElementById('b_quoted').value) || 0;
+    const hRatio = parseFloat(document.getElementById('h_ratio').value) || 0;
+    const dRatio = parseFloat(document.getElementById('d_ratio').value) || 0;
+    let costs = 0;
+    document.querySelectorAll('.sl-amount').forEach(i => { costs += parseFloat(i.value) || 0; });
+    const profit = quoted - costs;
+    const hShare = profit * hRatio / 100;
+    const dShare = profit * dRatio / 100;
+
+    document.getElementById('spend_total_display').textContent = fmt(costs);
+    document.getElementById('prev_quoted').textContent  = fmt(quoted);
+    document.getElementById('prev_profit').textContent  = fmt(profit);
+    document.getElementById('prev_profit').className    = 'fw-bold money small ' + (profit >= 0 ? 'text-green' : 'text-danger');
+    document.getElementById('prev_h').textContent       = fmt(hShare);
+    document.getElementById('prev_d').textContent       = fmt(dShare);
+  }
+
+  // Quotation select → auto-fill quoted amount and job name (only for new jobs)
+  const isNew = !{{ 'true' if job else 'false' }};
+  document.getElementById('b_linked_qid').addEventListener('change', function () {
+    const opt = this.options[this.selectedIndex];
+    if (!opt.value) return;
+    const amount = parseFloat(opt.dataset.amount) || 0;
+    document.getElementById('b_quoted').value = amount;
+    if (isNew && !document.getElementById('b_job_name').value.trim()) {
+      document.getElementById('b_job_name').value = opt.dataset.label || '';
+    }
+    updatePreview();
+  });
+
+  document.getElementById('b_quoted').addEventListener('input', updatePreview);
+  document.getElementById('h_ratio').addEventListener('input', updatePreview);
+  document.getElementById('d_ratio').addEventListener('input', updatePreview);
+
+  // ── Seed rows on load ────────────────────────────────────────────────────
+  const tbody = document.getElementById('spendBody');
+  if ((window.EXISTING_SPEND || []).length > 0) {
+    // Editing an existing job — load its saved spend lines
+    window.EXISTING_SPEND.forEach(row => {
+      tbody.appendChild(makeSpendRow(row.description || '', row.paid_by || 'Hillary', row.amount || ''));
+    });
+  } else {
+    // New job — seed from prefill (executor payment etc.), then one blank row
+    const prefillLines = (window.PREFILL || {}).spend_lines || [];
+    prefillLines.forEach(row => {
+      tbody.appendChild(makeSpendRow(row.description || '', row.paid_by || 'Hillary', row.amount || ''));
+    });
+    tbody.appendChild(makeSpendRow('', 'Hillary', ''));
+  }
+
+  updatePreview();
+})();
+</script>
+{% endblock %}

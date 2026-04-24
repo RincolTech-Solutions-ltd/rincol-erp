@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block title %}Balancing Report{% endblock %}
+{% block breadcrumb %}
+  <a href="{{ url_for('balancing_list') }}" class="text-muted text-decoration-none">Balancing</a>
+  &rsaquo; Report
+{% endblock %}
+
+{% macro money(v) %}{{ '{:,.0f}'.format(v or 0) }}{% endmacro %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h5 class="mb-0">Company Performance Report</h5>
+  <a href="{{ url_for('balancing_list') }}" class="btn btn-sm btn-outline-secondary">
+    <i class="bi bi-arrow-left"></i> Back
+  </a>
+</div>
+
+{# Grand totals #}
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="card h-100">
+      <div class="card-body py-2 text-center">
+        <div class="section-header mb-1">Total Quoted</div>
+        <div class="money fw-bold">UGX {{ money(grand.quoted) }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card h-100">
+      <div class="card-body py-2 text-center">
+        <div class="section-header mb-1">Total Costs</div>
+        <div class="money fw-bold text-danger">UGX {{ money(grand.costs) }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card h-100">
+      <div class="card-body py-2 text-center">
+        <div class="section-header mb-1">Net Profit</div>
+        <div class="money fw-bold text-green fs-5">UGX {{ money(grand.profit) }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card h-100">
+      <div class="card-body py-2 text-center">
+        <div class="section-header mb-1">Dennis Still Owed</div>
+        <div class="money fw-bold {% if grand.dennis_remaining > 0 %}text-danger{% else %}text-green{% endif %}">
+          UGX {{ money(grand.dennis_remaining) }}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# Individual share summary #}
+<div class="row g-3 mb-4">
+  <div class="col-md-6">
+    <div class="card" style="border-color:rgba(137,180,250,.3)">
+      <div class="card-body">
+        <div class="section-header text-blue mb-2">Hillary</div>
+        <div class="d-flex justify-content-between mb-1">
+          <span class="text-muted">Total profit share</span>
+          <span class="money fw-bold text-blue">UGX {{ money(grand.h_share) }}</span>
+        </div>
+        <div class="d-flex justify-content-between">
+          <span class="text-muted">Collected from customers</span>
+          <span class="money">UGX {{ money(grand.hillary_collected) }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card" style="border-color:rgba(167,139,250,.3)">
+      <div class="card-body">
+        <div class="section-header mb-2" style="color:#a78bfa">Dennis</div>
+        <div class="d-flex justify-content-between mb-1">
+          <span class="text-muted">Total profit share</span>
+          <span class="money fw-bold" style="color:#a78bfa">UGX {{ money(grand.d_share) }}</span>
+        </div>
+        <div class="d-flex justify-content-between mb-1">
+          <span class="text-muted">Collected from customers</span>
+          <span class="money">UGX {{ money(grand.dennis_collected) }}</span>
+        </div>
+        <div class="d-flex justify-content-between fw-bold">
+          <span>Still owed by Hillary</span>
+          <span class="money {% if grand.dennis_remaining > 0 %}text-danger{% else %}text-green{% endif %}">
+            UGX {{ money(grand.dennis_remaining) }}
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# Per-job table #}
+<div class="card">
+  <div class="card-header"><span class="section-header mb-0">All Jobs</span></div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-sm table-hover mb-0 align-middle">
+        <thead>
+          <tr>
+            <th>Job</th>
+            <th>Status</th>
+            <th class="text-end">Quoted</th>
+            <th class="text-end">Costs</th>
+            <th class="text-end">Profit</th>
+            <th class="text-end">H Share</th>
+            <th class="text-end">D Share</th>
+            <th class="text-end">D Remaining</th>
+            <th>Date</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for j in jobs %}
+          {% set status_cls = {'Open':'secondary','In Progress':'warning','Settled':'success'}.get(j.status,'secondary') %}
+          <tr>
+            <td>
+              <a href="{{ url_for('balancing_view', jid=j.id) }}" class="text-decoration-none">{{ j.job_name }}</a>
+            </td>
+            <td><span class="badge bg-{{ status_cls }} bg-opacity-25 text-{{ status_cls }}">{{ j.status }}</span></td>
+            <td class="text-end money small">{{ money(j.quoted) }}</td>
+            <td class="text-end money small text-muted">{{ money(j.total_costs) }}</td>
+            <td class="text-end money fw-bold {% if j.profit >= 0 %}text-green{% else %}text-danger{% endif %}">
+              {{ money(j.profit) }}
+            </td>
+            <td class="text-end money small text-blue">{{ money(j.h_share) }}</td>
+            <td class="text-end money small" style="color:#a78bfa">{{ money(j.d_share) }}</td>
+            <td class="text-end money small {% if j.dennis_remaining > 0 %}text-danger{% else %}text-green{% endif %}">
+              {{ money(j.dennis_remaining) }}
+            </td>
+            <td class="text-muted small">{{ j.date }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="9" class="text-center text-muted py-4">No jobs yet.</td></tr>
+          {% endfor %}
+        </tbody>
+        <tfoot class="fw-bold">
+          <tr style="border-top:2px solid #2a2d45">
+            <td colspan="2">TOTAL</td>
+            <td class="text-end money">{{ money(grand.quoted) }}</td>
+            <td class="text-end money text-muted">{{ money(grand.costs) }}</td>
+            <td class="text-end money text-green">{{ money(grand.profit) }}</td>
+            <td class="text-end money text-blue">{{ money(grand.h_share) }}</td>
+            <td class="text-end money" style="color:#a78bfa">{{ money(grand.d_share) }}</td>
+            <td class="text-end money {% if grand.dennis_remaining > 0 %}text-danger{% else %}text-green{% endif %}">
+              {{ money(grand.dennis_remaining) }}
+            </td>
+            <td></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

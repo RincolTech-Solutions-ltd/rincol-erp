@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Catalog{% endblock %}
+{% block breadcrumb %}Catalog{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h5 class="mb-0">Item Catalog</h5>
+  <a href="{{ url_for('catalog_edit') }}" class="btn btn-primary btn-sm"><i class="bi bi-plus"></i> Add Item</a>
+</div>
+
+<form method="get" class="row g-2 mb-3">
+  <div class="col-auto">
+    <input type="text" name="q" class="form-control form-control-sm" placeholder="Search name/spec" value="{{ search }}">
+  </div>
+  <div class="col-auto">
+    <select name="cat" class="form-select form-select-sm">
+      <option value="">All categories</option>
+      {% for c in categories %}
+      <option value="{{ c }}" {% if cat==c %}selected{% endif %}>{{ c }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-auto">
+    <button type="submit" class="btn btn-sm btn-outline-secondary">Filter</button>
+    <a href="{{ url_for('catalog_list') }}" class="btn btn-sm btn-outline-secondary ms-1">Clear</a>
+  </div>
+</form>
+
+<div class="card">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead>
+          <tr><th>ID</th><th>Category</th><th>Name</th><th>Spec</th><th>UOM</th><th class="text-end">Buy (UGX)</th><th class="text-end">Sell (UGX)</th><th></th></tr>
+        </thead>
+        <tbody>
+          {% for it in items %}
+          <tr>
+            <td class="text-muted small font-monospace">{{ it.id }}</td>
+            <td class="small">{{ it.category }}</td>
+            <td>{{ it.name }}</td>
+            <td class="text-muted small">{{ it.spec }}</td>
+            <td class="small">{{ it.uom }}</td>
+            <td class="text-end money small">{{ '{:,.0f}'.format(it.buy_price or 0) }}</td>
+            <td class="text-end money small text-green">{{ '{:,.0f}'.format(it.sell_price or 0) }}</td>
+            <td class="text-end">
+              <a href="{{ url_for('catalog_edit', item_id=it.id) }}" class="btn btn-sm btn-outline-secondary py-0 px-2"><i class="bi bi-pencil"></i></a>
+              <form method="post" action="{{ url_for('catalog_delete', item_id=it.id) }}" class="d-inline"
+                    onsubmit="return confirm('Delete this item?')">
+                <button class="btn btn-sm btn-outline-danger py-0 px-2"><i class="bi bi-trash"></i></button>
+              </form>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="8" class="text-center text-muted py-4">No items found.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

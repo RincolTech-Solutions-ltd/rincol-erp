@@ -1,0 +1,222 @@
+{% extends "base.html" %}
+{% block title %}Maintenance — {{ r.client_name }}{% endblock %}
+{% block breadcrumb %}
+  <a href="{{ url_for('maintenance_list') }}" class="text-muted text-decoration-none">Maintenance</a>
+  &rsaquo; {{ r.client_name }}
+{% endblock %}
+
+{% macro money(v) %}UGX {{ '{:,.0f}'.format(v or 0) }}{% endmacro %}
+{% macro mraw(v) %}{{ '{:,.0f}'.format(v or 0) }}{% endmacro %}
+
+{% block content %}
+{# ── Header ────────────────────────────────────────────────────────────── #}
+<div class="d-flex justify-content-between align-items-start mb-3">
+  <div>
+    <h5 class="mb-1">{{ r.client_name }}{% if r.client_phone %} &mdash; {{ r.client_phone }}{% endif %}</h5>
+    <div class="text-muted small">
+      {{ r.visit_date }}
+      &bull; <span class="badge {% if r.type=='Warranty' %}badge-warranty{% else %}badge-paid-type{% endif %}">{{ r.type }}</span>
+      &bull; <span class="badge {% if r.status=='Open' %}badge-open{% elif r.status=='Resolved' %}badge-resolved{% else %}badge-pending-parts{% endif %}">{{ r.status }}</span>
+      {% if r.quotation_no %}&bull; Ref: <a href="{{ url_for('quotations_view', qid=r.linked_quotation_id) }}" class="text-muted">{{ r.quotation_no }}</a>{% endif %}
+    </div>
+  </div>
+  <a href="{{ url_for('maintenance_edit', mid=r.id) }}" class="btn btn-sm btn-outline-secondary">
+    <i class="bi bi-pencil"></i> Edit
+  </a>
+</div>
+
+<div class="row g-3">
+{# ── LEFT: Financial Summary ───────────────────────────────────────────── #}
+<div class="col-md-6">
+
+  {# Cost / Revenue / Profit #}
+  <div class="card mb-3">
+    <div class="card-header"><span class="section-header mb-0">Financial Summary</span></div>
+    <div class="card-body">
+      <div class="row text-center mb-3">
+        <div class="col-4">
+          <div class="small text-muted mb-1">Total Cost</div>
+          <div class="fw-bold money text-danger">{{ money(fin.total_cost) }}</div>
+          <div class="small text-muted">Paid by {{ r.paid_by or 'Hillary' }}</div>
+        </div>
+        <div class="col-4">
+          <div class="small text-muted mb-1">Revenue</div>
+          <div class="fw-bold money {% if fin.revenue > 0 %}text-green{% else %}text-muted{% endif %}">{{ money(fin.revenue) }}</div>
+          <div class="small text-muted">from customer</div>
+        </div>
+        <div class="col-4">
+          <div class="small text-muted mb-1">Net</div>
+          <div class="fw-bold money {% if fin.profit >= 0 %}text-green{% else %}text-danger{% endif %}">
+            {{ money(fin.profit) }}
+          </div>
+          <div class="small text-muted">{% if fin.profit < 0 %}loss{% else %}profit{% endif %}</div>
+        </div>
+      </div>
+
+      {# Per-person breakdown #}
+      <div class="rounded p-3" style="background:rgba(255,255,255,.04);border:1px solid #2a2d45">
+        <div class="small text-muted mb-2">Split: Hillary {{ fin.h_ratio }}% / Dennis {{ fin.d_ratio }}%</div>
+        <table class="table table-sm mb-0" style="background:transparent">
+          <thead><tr>
+            <th class="text-muted small fw-normal ps-0"></th>
+            <th class="text-end small text-primary">Hillary</th>
+            <th class="text-end small" style="color:#a78bfa">Dennis</th>
+          </tr></thead>
+          <tbody>
+            <tr>
+              <td class="ps-0 small text-muted">Fronted cost</td>
+              <td class="text-end money small">{{ mraw(fin.hillary_spend) }}</td>
+              <td class="text-end money small">{{ mraw(fin.dennis_spend) }}</td>
+            </tr>
+            <tr>
+              <td class="ps-0 small text-muted">Share of net</td>
+              <td class="text-end money small {% if fin.profit * fin.h_ratio < 0 %}text-danger{% endif %}">
+                {{ mraw(fin.profit * fin.h_ratio / 100) }}
+              </td>
+              <td class="text-end money small {% if fin.profit * fin.d_ratio < 0 %}text-danger{% endif %}">
+                {{ mraw(fin.profit * fin.d_ratio / 100) }}
+              </td>
+            </tr>
+            <tr class="border-top">
+              <td class="ps-0 small fw-bold">Total due</td>
+              <td class="text-end money small fw-bold text-primary">{{ mraw(fin.hillary_total_due) }}</td>
+              <td class="text-end money small fw-bold" style="color:#a78bfa">{{ mraw(fin.dennis_total_due) }}</td>
+            </tr>
+            <tr>
+              <td class="ps-0 small text-muted">Collected</td>
+              <td class="text-end money small text-green">{{ mraw(fin.hillary_collected) }}</td>
+              <td class="text-end money small text-green">{{ mraw(fin.dennis_collected) }}</td>
+            </tr>
+            <tr class="border-top">
+              <td class="ps-0 small fw-bold">Still owed</td>
+              <td class="text-end money small fw-bold {% if fin.hillary_remaining > 0 %}text-warning{% elif fin.hillary_remaining < 0 %}text-danger{% else %}text-green{% endif %}">
+                {{ mraw(fin.hillary_remaining) }}
+              </td>
+              <td class="text-end money small fw-bold {% if fin.dennis_remaining > 0 %}text-warning{% elif fin.dennis_remaining < 0 %}text-danger{% else %}text-green{% endif %}">
+                {{ mraw(fin.dennis_remaining) }}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      {# Settlement alert #}
+      {% set h_rem = fin.hillary_remaining %}
+      {% set d_rem = fin.dennis_remaining %}
+      {% if d_rem < 0 and h_rem > 0 %}
+      <div class="alert alert-warning mt-3 mb-0 py-2 small">
+        <i class="bi bi-arrow-left-right"></i>
+        Dennis should pay Hillary <strong>{{ money(fin.hillary_remaining) }}</strong>
+      </div>
+      {% elif h_rem < 0 and d_rem > 0 %}
+      <div class="alert alert-warning mt-3 mb-0 py-2 small">
+        <i class="bi bi-arrow-left-right"></i>
+        Hillary should pay Dennis <strong>{{ money(fin.dennis_remaining) }}</strong>
+      </div>
+      {% elif h_rem <= 0 and d_rem <= 0 %}
+      <div class="alert alert-success mt-3 mb-0 py-2 small">
+        <i class="bi bi-check-circle"></i> Fully settled
+      </div>
+      {% else %}
+      <div class="alert mt-3 mb-0 py-2 small" style="background:rgba(251,191,36,.1);border-color:#fbbf24;color:#fbbf24">
+        <i class="bi bi-hourglass-split"></i>
+        {% if h_rem > 0 %}Hillary still owed {{ money(h_rem) }}.{% endif %}
+        {% if d_rem > 0 %}Dennis still owed {{ money(d_rem) }}.{% endif %}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  {# Receipts (for Paid visits) #}
+  <div class="card mb-3">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span class="section-header mb-0">Customer Receipts</span>
+      <a href="{{ url_for('receipts_new') }}?mid={{ r.id }}"
+         class="btn btn-sm btn-outline-success py-0 px-2">
+        <i class="bi bi-plus"></i> New Receipt
+      </a>
+    </div>
+    <div class="card-body p-0">
+      {% if receipts %}
+      <table class="table table-sm mb-0">
+        <thead><tr>
+          <th>Date</th><th>Receipt No.</th><th>Collected by</th><th class="text-end">Paid</th>
+        </tr></thead>
+        <tbody>
+          {% for rec in receipts %}
+          <tr>
+            <td class="small">{{ rec.date }}</td>
+            <td class="small"><a href="{{ url_for('receipts_view', rid=rec.id) }}" class="text-muted">{{ rec.receipt_no }}</a></td>
+            <td class="small">
+              <span class="badge {% if rec.collected_by=='Hillary' %}bg-primary bg-opacity-25 text-primary{% else %}badge-purple{% endif %}">
+                {{ rec.collected_by or '—' }}
+              </span>
+            </td>
+            <td class="text-end money small">{{ mraw(rec.amount_paid) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="text-center text-muted py-3 small">
+        No receipts yet.
+        {% if r.type == 'Paid' %}
+        <a href="{{ url_for('receipts_new') }}?mid={{ r.id }}">Record payment.</a>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+
+{# ── RIGHT: Visit Details ─────────────────────────────────────────────── #}
+<div class="col-md-6">
+
+  <div class="card mb-3">
+    <div class="card-header"><span class="section-header mb-0">Visit Details</span></div>
+    <div class="card-body">
+      {% if r.problem %}
+      <div class="mb-2">
+        <div class="small text-muted">Problem</div>
+        <div class="small">{{ r.problem }}</div>
+      </div>
+      {% endif %}
+      {% if r.parts_used %}
+      <div class="mb-2">
+        <div class="small text-muted">Parts Used</div>
+        <div class="small">{{ r.parts_used }}</div>
+      </div>
+      {% endif %}
+      <div class="row g-2 mt-1">
+        <div class="col-6">
+          <div class="small text-muted">Parts Cost</div>
+          <div class="money small">{{ money(r.parts_cost) }}</div>
+        </div>
+        <div class="col-6">
+          <div class="small text-muted">Labour Fee</div>
+          <div class="money small">{{ money(r.labour_fee) }}</div>
+        </div>
+        {% if r.executor_name %}
+        <div class="col-6">
+          <div class="small text-muted">Executor</div>
+          <div class="small">{{ r.executor_name }}</div>
+        </div>
+        <div class="col-6">
+          <div class="small text-muted">Executor Pay</div>
+          <div class="money small">{{ money(r.executor_payment) }}</div>
+        </div>
+        {% endif %}
+      </div>
+      {% if r.notes %}
+      <div class="mt-2">
+        <div class="small text-muted">Notes</div>
+        <div class="small">{{ r.notes }}</div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+</div>
+{% endblock %}

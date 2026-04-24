@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% block title %}Tasks{% endblock %}
+{% block breadcrumb %}Tasks{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div class="d-flex gap-2">
+    <h5 class="mb-0 me-2">Tasks</h5>
+    {# Filter tabs #}
+    <a href="{{ url_for('tasks_list') }}"
+       class="btn btn-sm {% if not status or status not in ['done','all'] %}btn-primary{% else %}btn-outline-secondary{% endif %}">
+      Open
+    </a>
+    <a href="{{ url_for('tasks_list', status='all') }}"
+       class="btn btn-sm {% if status=='all' %}btn-primary{% else %}btn-outline-secondary{% endif %}">
+      All
+    </a>
+    <a href="{{ url_for('tasks_list', status='done') }}"
+       class="btn btn-sm {% if status=='done' %}btn-primary{% else %}btn-outline-secondary{% endif %}">
+      Done
+    </a>
+  </div>
+  <a href="{{ url_for('tasks_edit') }}" class="btn btn-primary btn-sm">
+    <i class="bi bi-plus"></i> New Task
+  </a>
+</div>
+
+<div class="card">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0 align-middle">
+        <thead>
+          <tr>
+            <th style="width:35%">Task</th>
+            <th>Priority</th>
+            <th>Status</th>
+            <th>Due Date</th>
+            <th>Assigned</th>
+            <th>Quotation</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for t in tasks %}
+          {% set overdue = t.due_date and t.due_date < today %}
+          {% set due_soon = t.due_date and not overdue and (t.due_date - today).days <= 3 %}
+          {% set priority_cls = {'Urgent':'danger','High':'warning','Normal':'primary','Low':'secondary'}.get(t.priority,'secondary') %}
+          {% set status_cls = {'Done':'success','In Progress':'info','Pending':'secondary'}.get(t.status,'secondary') %}
+          <tr class="{% if overdue and t.status != 'Done' %}table-danger table-danger-subtle{% elif due_soon %}table-warning table-warning-subtle{% endif %}">
+            <td>
+              <a href="{{ url_for('tasks_edit', tid=t.id) }}" class="fw-semibold text-decoration-none
+                {% if t.status == 'Done' %}text-muted text-decoration-line-through{% endif %}">
+                {{ t.title }}
+              </a>
+              {% if t.description %}
+              <div class="text-muted small text-truncate" style="max-width:260px">{{ t.description }}</div>
+              {% endif %}
+            </td>
+            <td>
+              <span class="badge bg-{{ priority_cls }} bg-opacity-25 text-{{ priority_cls }}">
+                {{ t.priority }}
+              </span>
+            </td>
+            <td>
+              <span class="badge bg-{{ status_cls }} bg-opacity-25 text-{{ status_cls }}">
+                {{ t.status }}
+              </span>
+            </td>
+            <td>
+              {% if t.due_date %}
+                {% if overdue and t.status != 'Done' %}
+                  <span class="text-danger fw-semibold">
+                    <i class="bi bi-exclamation-circle-fill"></i> {{ t.due_date }}
+                  </span>
+                  <div class="text-danger" style="font-size:.7rem">OVERDUE</div>
+                {% elif due_soon %}
+                  <span class="text-warning fw-semibold">
+                    <i class="bi bi-clock-fill"></i> {{ t.due_date }}
+                  </span>
+                  {% set days_left = (t.due_date - today).days %}
+                  <div class="text-warning" style="font-size:.7rem">
+                    {% if days_left == 0 %}TODAY{% elif days_left == 1 %}TOMORROW{% else %}{{ days_left }} days{% endif %}
+                  </div>
+                {% else %}
+                  {{ t.due_date }}
+                {% endif %}
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td class="small text-muted">{{ t.assigned_to or '—' }}</td>
+            <td class="small">
+              {% if t.quotation_no %}
+              <a href="{{ url_for('quotations_view', qid=t.linked_quotation_id) }}"
+                 class="text-decoration-none text-muted">{{ t.quotation_no }}</a>
+              {% else %}—{% endif %}
+            </td>
+            <td class="text-end">
+              {% if t.status != 'Done' %}
+              <form method="post" action="{{ url_for('tasks_done', tid=t.id) }}" class="d-inline">
+                <button class="btn btn-sm btn-outline-success py-0 px-1" title="Mark done">
+                  <i class="bi bi-check-lg"></i>
+                </button>
+              </form>
+              {% endif %}
+              <a href="{{ url_for('tasks_edit', tid=t.id) }}" class="btn btn-sm btn-outline-secondary py-0 px-1" title="Edit">
+                <i class="bi bi-pencil"></i>
+              </a>
+              <form method="post" action="{{ url_for('tasks_delete', tid=t.id) }}" class="d-inline"
+                    onsubmit="return confirm('Delete this task?')">
+                <button class="btn btn-sm btn-outline-danger py-0 px-1" title="Delete">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </form>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="7" class="text-center text-muted py-5">
+              {% if status == 'done' %}No completed tasks.{% else %}No open tasks. Great work!{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{# Legend #}
+<div class="d-flex gap-3 mt-2 small text-muted">
+  <span><span style="display:inline-block;width:12px;height:12px;background:rgba(248,113,113,.15);border-radius:2px"></span> Overdue</span>
+  <span><span style="display:inline-block;width:12px;height:12px;background:rgba(234,179,8,.15);border-radius:2px"></span> Due within 3 days</span>
+</div>
+{% endblock %}

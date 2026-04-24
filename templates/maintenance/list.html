@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Maintenance{% endblock %}
+{% block breadcrumb %}Maintenance{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h5 class="mb-0">Maintenance Records</h5>
+  <a href="{{ url_for('maintenance_new') }}" class="btn btn-primary btn-sm"><i class="bi bi-plus"></i> Log Visit</a>
+</div>
+
+<form method="get" class="d-flex gap-2 mb-3">
+  <select name="status" class="form-select form-select-sm" style="width:auto">
+    <option value="">All statuses</option>
+    {% for s in ['Open','Resolved','Pending Parts'] %}
+    <option value="{{ s }}" {% if status==s %}selected{% endif %}>{{ s }}</option>
+    {% endfor %}
+  </select>
+  <button type="submit" class="btn btn-sm btn-outline-secondary">Filter</button>
+  <a href="{{ url_for('maintenance_list') }}" class="btn btn-sm btn-outline-secondary">Clear</a>
+</form>
+
+<div class="card">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead>
+          <tr><th>Client</th><th>Phone</th><th>Type</th><th>Status</th><th>Executor</th><th class="text-end">Labour</th><th>Date</th><th></th></tr>
+        </thead>
+        <tbody>
+          {% for r in records %}
+          <tr>
+            <td>
+              <a href="{{ url_for('maintenance_view', mid=r.id) }}" class="text-decoration-none fw-medium">{{ r.client_name }}</a>
+              {% if r.quotation_no %}<div class="text-muted" style="font-size:.7rem">Ref: {{ r.quotation_no }}</div>{% endif %}
+            </td>
+            <td class="text-muted small">{{ r.client_phone }}</td>
+            <td>
+              <span class="badge {% if r.type=='Warranty' %}badge-warranty{% else %}badge-paid-type{% endif %}">{{ r.type }}</span>
+            </td>
+            <td>
+              <span class="badge {% if r.status=='Open' %}badge-open{% elif r.status=='Resolved' %}badge-resolved{% else %}badge-pending-parts{% endif %}">{{ r.status }}</span>
+            </td>
+            <td class="text-muted small">{{ r.executor_name or '—' }}</td>
+            <td class="text-end money small">{{ '{:,.0f}'.format(r.labour_fee or 0) }}</td>
+            <td class="text-muted small">{{ r.visit_date }}</td>
+            <td>
+              <a href="{{ url_for('maintenance_edit', mid=r.id) }}" class="btn btn-sm btn-outline-secondary py-0 px-2"><i class="bi bi-pencil"></i></a>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="8" class="text-center text-muted py-4">No maintenance records.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
