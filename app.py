@@ -352,6 +352,13 @@ def receipts_new():
         "FROM receipts WHERE quotation_id IS NOT NULL GROUP BY quotation_id")
     prev_paid = {str(row["quotation_id"]): float(row["total_paid"]) for row in (prev_paid_rows or [])}
 
+    # Build a map of last being_for per quotation (for consistency across installments)
+    being_for_rows = query(
+        "SELECT DISTINCT ON (quotation_id) quotation_id, being_for "
+        "FROM receipts WHERE quotation_id IS NOT NULL AND being_for <> '' "
+        "ORDER BY quotation_id, date DESC")
+    being_for_map = {str(row["quotation_id"]): row["being_for"] for row in (being_for_rows or [])}
+
     if request.method == "POST":
         f    = request.form
         rid  = str(uuid.uuid4())
@@ -390,14 +397,15 @@ def receipts_new():
         execute("""INSERT INTO receipts
             (id,receipt_no,date,customer_name,customer_phone,customer_email,
              customer_address,being_for,amount_fig,amount_paid,balance,cheque_no,
-             issued_name,received_name,collected_by,quotation_id,maintenance_id)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+             issued_name,received_name,collected_by,quotation_id,maintenance_id,payment_method)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
             (rid, rno, f.get("date") or date.today().isoformat(),
              f["customer_name"], f.get("customer_phone",""), f.get("customer_email",""),
              f.get("customer_address",""), f.get("being_for",""),
              fig, paid, balance, f.get("cheque_no",""),
              f.get("issued_name",""), f.get("received_name",""),
-             f.get("collected_by","Hillary"), qid, mid))
+             f.get("collected_by","Hillary"), qid, mid,
+             f.get("payment_method","Cash")))
         flash("Receipt saved.", "success")
         return redirect(url_for("receipts_view", rid=rid))
 
@@ -422,6 +430,7 @@ def receipts_new():
         prefill_maint = query_one("SELECT * FROM maintenance_records WHERE id=%s", (prefill_mid,))
     return render_template("receipt/form.html", r=None, quotations=quotations,
                            prev_paid=prev_paid,
+                           being_for_map=being_for_map,
                            next_rno=next_rno,
                            prefill_qid=prefill_qid, prefill_mid=prefill_mid, prefill_maint=prefill_maint)
 
@@ -452,14 +461,16 @@ def receipts_edit(rid):
             receipt_no=%s, date=%s, customer_name=%s, customer_phone=%s,
             customer_email=%s, customer_address=%s, being_for=%s,
             amount_fig=%s, amount_paid=%s, balance=%s, cheque_no=%s,
-            issued_name=%s, received_name=%s, collected_by=%s, quotation_id=%s
+            issued_name=%s, received_name=%s, collected_by=%s, quotation_id=%s,
+            payment_method=%s
             WHERE id=%s""",
             (f.get("receipt_no",""), f.get("date") or date.today().isoformat(),
              f["customer_name"], f.get("customer_phone",""), f.get("customer_email",""),
              f.get("customer_address",""), f.get("being_for",""),
              fig, paid, fig - paid, f.get("cheque_no",""),
              f.get("issued_name",""), f.get("received_name",""),
-             f.get("collected_by","Hillary"), qid, rid))
+             f.get("collected_by","Hillary"), qid,
+             f.get("payment_method","Cash"), rid))
         flash("Receipt updated.", "success")
         return redirect(url_for("receipts_view", rid=rid))
     quotations = query("SELECT id, quotation_no, customer_name, customer_phone, total_amount FROM quotations ORDER BY date DESC LIMIT 100")

@@ -10,6 +10,56 @@ function fmt(n) {
   return Math.round(n).toLocaleString('en-US');
 }
 
+// ── Global money input — comma separators as you type ────────────────────────
+// Usage: add class="money-input" to any text input that holds a currency amount.
+// The raw numeric value (no commas) is submitted because commas are stripped
+// on form submit via the event below.
+(function () {
+  function formatMoney(val) {
+    // Allow digits and one decimal point only
+    const raw = val.replace(/[^0-9.]/g, '');
+    const parts = raw.split('.');
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return parts.slice(0, 2).join(parts.length > 1 ? '.' : '');
+  }
+
+  function applyFormatter(el) {
+    el.addEventListener('input', function () {
+      const pos = this.selectionStart;
+      const oldLen = this.value.length;
+      this.value = formatMoney(this.value);
+      // Restore cursor roughly (comma insertions shift position)
+      const delta = this.value.length - oldLen;
+      this.setSelectionRange(pos + delta, pos + delta);
+    });
+  }
+
+  // Apply to all existing .money-input elements on load
+  document.querySelectorAll('.money-input').forEach(applyFormatter);
+
+  // Also handle dynamically added elements (e.g. quotation line rows)
+  const observer = new MutationObserver(mutations => {
+    mutations.forEach(m => m.addedNodes.forEach(node => {
+      if (node.nodeType !== 1) return;
+      node.querySelectorAll?.('.money-input').forEach(applyFormatter);
+      if (node.classList?.contains('money-input')) applyFormatter(node);
+    }));
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
+
+  // Strip commas before every form submits so the server gets plain numbers
+  document.addEventListener('submit', function (e) {
+    e.target.querySelectorAll('.money-input').forEach(el => {
+      el.value = el.value.replace(/,/g, '');
+    });
+  }, true);
+
+  // Format initial values on page load
+  document.querySelectorAll('.money-input').forEach(el => {
+    if (el.value) el.value = formatMoney(el.value);
+  });
+})();
+
 // ── Column resize (vanilla, no lib dependency) ───────────────────────────────
 function initColResize(tableId) {
   const table = document.getElementById(tableId);
@@ -366,40 +416,4 @@ function initColResize(tableId) {
   recalcBalancing();
 })();
 
-// ── Receipt: auto-fill fields from linked quotation ──────────────────────────
-(function () {
-  const sel      = document.getElementById('receipt_quotation_id');
-  const figEl    = document.getElementById('amount_fig');
-  const nameEl   = document.querySelector('input[name="customer_name"]');
-  const phoneEl  = document.querySelector('input[name="customer_phone"]');
-  if (!sel) return;
-
-  function fillFromSelected() {
-    const opt = sel.options[sel.selectedIndex];
-    if (!opt || !opt.value) return;
-    const amt = parseFloat(opt.dataset.amount || 0);
-    if (figEl && amt > 0) { figEl.value = amt; figEl.dispatchEvent(new Event('input')); }
-    if (nameEl  && opt.dataset.customer) nameEl.value  = opt.dataset.customer;
-    if (phoneEl && opt.dataset.phone)    phoneEl.value = opt.dataset.phone;
-  }
-
-  sel.addEventListener('change', fillFromSelected);
-  // Auto-fill on page load if a quotation is pre-selected
-  if (sel.value) fillFromSelected();
-})();
-
-// ── Receipt amount auto-balance ──────────────────────────────────────────────
-(function () {
-  const figEl  = document.getElementById('amount_fig');
-  const paidEl = document.getElementById('amount_paid');
-  const balEl  = document.getElementById('balance_display');
-  if (!figEl || !paidEl) return;
-  function updateBalance() {
-    const fig  = parseFloat(figEl.value)  || 0;
-    const paid = parseFloat(paidEl.value) || 0;
-    if (balEl) balEl.textContent = 'UGX ' + fmt(fig - paid);
-  }
-  figEl.addEventListener('input',  updateBalance);
-  paidEl.addEventListener('input', updateBalance);
-  updateBalance();
-})();
+// Receipt auto-fill and balance logic is handled inline in templates/receipt/form.html

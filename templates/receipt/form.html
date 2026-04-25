@@ -22,7 +22,8 @@
           </div>
           <div class="col-6">
             <label class="form-label">Date</label>
-            <input type="date" name="date" class="form-control form-control-sm">
+            <input type="date" name="date" class="form-control form-control-sm"
+                   value="{{ r.date if r else '' }}">
           </div>
           <div class="col-12">
             <label class="form-label">Linked Quotation <span class="text-muted">(optional)</span></label>
@@ -34,6 +35,7 @@
                 data-phone="{{ q.customer_phone or '' }}"
                 data-amount="{{ q.total_amount }}"
                 data-prev-paid="{{ prev_paid.get(q.id|string, 0) if prev_paid is defined else 0 }}"
+                data-being-for="{{ being_for_map.get(q.id|string, '') if being_for_map is defined else '' }}"
                 {% if (r and r.quotation_id==q.id) or (not r and prefill_qid==q.id) %}selected{% endif %}>
                 {{ q.quotation_no }} — {{ q.customer_name }}
               </option>
@@ -50,15 +52,19 @@
         <div class="row g-2">
           <div class="col-7">
             <label class="form-label">Name *</label>
-            <input type="text" name="customer_name" class="form-control form-control-sm" required>
+            <input type="text" name="customer_name" id="customer_name" class="form-control form-control-sm"
+                   value="{{ r.customer_name if r else '' }}" required>
           </div>
           <div class="col-5">
             <label class="form-label">Phone</label>
-            <input type="text" name="customer_phone" class="form-control form-control-sm">
+            <input type="text" name="customer_phone" id="customer_phone" class="form-control form-control-sm"
+                   value="{{ r.customer_phone if r else '' }}">
           </div>
           <div class="col-12">
             <label class="form-label">Being payment for</label>
-            <input type="text" name="being_for" class="form-control form-control-sm" placeholder="e.g. Solar system installation">
+            <input type="text" name="being_for" id="being_for" class="form-control form-control-sm"
+                   value="{{ r.being_for if r else '' }}"
+                   placeholder="e.g. Solar system installation">
           </div>
         </div>
       </div>
@@ -70,35 +76,58 @@
         <div class="row g-2 align-items-end">
           <div class="col-4">
             <label class="form-label">Invoice Total (UGX)</label>
-            <input type="number" name="amount_fig" id="amount_fig" class="form-control form-control-sm" min="0" step="any"
+            <input type="text" inputmode="decimal" name="amount_fig" id="amount_fig" class="form-control form-control-sm money-input"
                    value="{{ r.amount_fig if r else 0 }}">
           </div>
           <div class="col-4">
-            <label class="form-label">Previously Paid (UGX)</label>
-            <input type="number" id="prev_paid_display" class="form-control form-control-sm bg-light" readonly
-                   value="{{ r.amount_paid if r else 0 }}" tabindex="-1">
+            <label class="form-label text-muted">Previously Paid</label>
+            <div class="form-control form-control-sm readonly-field" id="prev_paid_display" data-raw="0">UGX 0</div>
+            <input type="hidden" id="prev_paid_value" value="0">
           </div>
           <div class="col-4">
-            <label class="form-label">Remaining Before This</label>
-            <div id="remaining_display" class="form-control form-control-sm bg-light text-muted small d-flex align-items-center">UGX 0</div>
+            <label class="form-label text-muted">Remaining Before This</label>
+            <div class="form-control form-control-sm readonly-field" id="remaining_display">UGX 0</div>
           </div>
         </div>
         <div class="row g-2 mt-2 align-items-end">
           <div class="col-5">
             <label class="form-label fw-semibold">This Payment (UGX)</label>
-            <input type="number" name="amount_paid" id="amount_paid" class="form-control form-control-sm" min="0" step="any"
+            <input type="text" inputmode="decimal" name="amount_paid" id="amount_paid" class="form-control form-control-sm money-input"
                    value="{{ r.amount_paid if r else 0 }}">
           </div>
           <div class="col-4">
-            <label class="form-label fw-semibold">Balance After This</label>
-            <div id="balance_display" class="fw-bold text-green small mt-1">UGX 0</div>
+            <label class="form-label fw-semibold">Balance After</label>
+            <div id="balance_display" class="fw-bold small mt-1 text-green">UGX 0</div>
           </div>
         </div>
-        <div class="row g-2 mt-1">
-          <div class="col-6">
-            <label class="form-label">Cheque No. (if any)</label>
-            <input type="text" name="cheque_no" class="form-control form-control-sm"
-                   value="{{ r.cheque_no if r else '' }}">
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-header"><span class="section-header mb-0">Payment Method</span></div>
+      <div class="card-body">
+        <div class="row g-2">
+          <div class="col-12">
+            <div class="d-flex gap-3 flex-wrap">
+              {% set pm = r.payment_method if r else 'Cash' %}
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="payment_method" id="pm_cash" value="Cash" {% if pm == 'Cash' %}checked{% endif %} onchange="toggleRef()">
+                <label class="form-check-label" for="pm_cash"><i class="bi bi-cash"></i> Cash</label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="payment_method" id="pm_bank" value="Bank Transfer" {% if pm == 'Bank Transfer' %}checked{% endif %} onchange="toggleRef()">
+                <label class="form-check-label" for="pm_bank"><i class="bi bi-bank"></i> Bank Transfer</label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="payment_method" id="pm_mm" value="Mobile Money" {% if pm == 'Mobile Money' %}checked{% endif %} onchange="toggleRef()">
+                <label class="form-check-label" for="pm_mm"><i class="bi bi-phone"></i> Mobile Money</label>
+              </div>
+            </div>
+          </div>
+          <div class="col-6 mt-2" id="ref_field" style="display:none">
+            <label class="form-label" id="ref_label">Reference / Cheque No.</label>
+            <input type="text" name="cheque_no" id="cheque_no" class="form-control form-control-sm"
+                   value="{{ r.cheque_no if r else '' }}" placeholder="">
           </div>
         </div>
       </div>
@@ -142,19 +171,25 @@
 {% block scripts %}
 <script>
 (function(){
-  const qSel     = document.getElementById('receipt_quotation_id');
-  const amtFig   = document.getElementById('amount_fig');
-  const prevDisp = document.getElementById('prev_paid_display');
-  const remDisp  = document.getElementById('remaining_display');
-  const amtPaid  = document.getElementById('amount_paid');
-  const balDisp  = document.getElementById('balance_display');
+  const qSel      = document.getElementById('receipt_quotation_id');
+  const amtFig    = document.getElementById('amount_fig');
+  const prevDisp  = document.getElementById('prev_paid_display');
+  const prevVal   = document.getElementById('prev_paid_value');
+  const remDisp   = document.getElementById('remaining_display');
+  const amtPaid   = document.getElementById('amount_paid');
+  const balDisp   = document.getElementById('balance_display');
+  const beingFor  = document.getElementById('being_for');
+  const nameEl    = document.getElementById('customer_name');
+  const phoneEl   = document.getElementById('customer_phone');
 
-  function fmt(n){ return 'UGX ' + Math.round(n).toLocaleString('en-UG'); }
+  function fmt(n){ return 'UGX ' + Math.round(n).toLocaleString(); }
+
+  function raw(el){ return parseFloat((el.value||'').replace(/,/g,'')) || 0; }
 
   function recalc(){
-    const total     = parseFloat(amtFig.value)   || 0;
-    const prevPaid  = parseFloat(prevDisp.value)  || 0;
-    const thisPay   = parseFloat(amtPaid.value)   || 0;
+    const total     = raw(amtFig);
+    const prevPaid  = parseFloat(prevVal.value) || 0;
+    const thisPay   = raw(amtPaid);
     const remaining = total - prevPaid;
     const balance   = remaining - thisPay;
     remDisp.textContent = fmt(remaining);
@@ -163,17 +198,19 @@
   }
 
   function onQuotationChange(){
-    const opt = qSel.options[qSel.selectedIndex];
+    const opt = qSel ? qSel.options[qSel.selectedIndex] : null;
     if(!opt || !opt.value){ recalc(); return; }
-    const amount   = parseFloat(opt.dataset.amount)   || 0;
-    const prevPaid = parseFloat(opt.dataset.prevPaid) || 0;
-    const nameEl = document.querySelector('[name=customer_name]');
-    if(nameEl && !nameEl.value) nameEl.value = opt.dataset.customer || '';
-    const phoneEl = document.querySelector('[name=customer_phone]');
-    if(phoneEl && !phoneEl.value) phoneEl.value = opt.dataset.phone || '';
-    amtFig.value   = amount;
-    prevDisp.value = prevPaid;
+    const amount    = parseFloat(opt.dataset.amount)   || 0;
+    const prevPaid  = parseFloat(opt.dataset.prevPaid) || 0;
+    const bFor      = opt.dataset.beingFor || '';
+    if(nameEl  && !nameEl.value)  nameEl.value  = opt.dataset.customer || '';
+    if(phoneEl && !phoneEl.value) phoneEl.value = opt.dataset.phone    || '';
+    if(beingFor && !beingFor.value) beingFor.value = bFor;
+    amtFig.value  = amount.toLocaleString('en-US');
+    prevVal.value = prevPaid;
+    prevDisp.textContent = fmt(prevPaid);
     recalc();
+    amtFig.dispatchEvent(new Event('input')); // trigger global money formatter
   }
 
   if(qSel)    qSel.addEventListener('change', onQuotationChange);
@@ -183,5 +220,33 @@
   if(qSel && qSel.value) onQuotationChange();
   else recalc();
 })();
+
+function toggleRef(){
+  const pm       = document.querySelector('[name=payment_method]:checked');
+  const refField = document.getElementById('ref_field');
+  const refLabel = document.getElementById('ref_label');
+  const refInput = document.getElementById('cheque_no');
+  if(!pm || pm.value === 'Cash'){
+    refField.style.display = 'none';
+    refInput.value = '';
+  } else {
+    refField.style.display = '';
+    refLabel.textContent = pm.value === 'Mobile Money' ? 'Transaction ID' : 'Cheque / Reference No.';
+    refInput.placeholder  = pm.value === 'Mobile Money' ? 'e.g. 1234567890' : 'e.g. CHQ-00123';
+  }
+}
+// Run on load
+toggleRef();
 </script>
+
+<style>
+.readonly-field {
+  cursor: default;
+  opacity: 0.75;
+  user-select: none;
+  font-size: .8125rem;
+  display: flex;
+  align-items: center;
+}
+</style>
 {% endblock %}
