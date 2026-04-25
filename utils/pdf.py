@@ -433,7 +433,11 @@ def build_receipt_pdf(r: dict, sig_issued_bytes=None, sig_received_bytes=None) -
     ]
     cheque = (r.get("cheque_no") or "").strip()
     if cheque:
-        pay_rows.append([Paragraph("Cheque No.", lbl_s), Paragraph(cheque, val_s)])
+        pm = (r.get("payment_method") or "").strip()
+        ref_label = "Transaction ID" if pm == "Mobile Money" else "Reference No." if pm == "Bank Transfer" else "Cheque No."
+        pay_rows.append([Paragraph(ref_label, lbl_s), Paragraph(cheque, val_s)])
+    pm_val = (r.get("payment_method") or "Cash").strip()
+    pay_rows.append([Paragraph("Payment Method", lbl_s), Paragraph(pm_val, val_s)])
 
     pay_tbl = Table(pay_rows, colWidths=[W * 0.68, W * 0.32])
     pay_tbl.setStyle(TableStyle([
