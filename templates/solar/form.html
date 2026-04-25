@@ -1,0 +1,620 @@
+{% extends "base.html" %}
+{% block title %}{% if sizing %}Edit Sizing — {{ sizing.client_name }}{% else %}New Solar Sizing{% endif %}{% endblock %}
+{% block breadcrumb %}
+  <a href="{{ url_for('solar_list') }}" class="text-muted text-decoration-none">Solar Sizing</a>
+  &rsaquo; {% if sizing %}Edit — {{ sizing.client_name }}{% else %}New Sizing{% endif %}
+{% endblock %}
+
+{% block content %}
+<form method="post">
+
+{# ── CLIENT INFO ──────────────────────────────────────────────────────────── #}
+<div class="card mb-3">
+  <div class="card-header"><span class="section-header mb-0">Client Information</span></div>
+  <div class="card-body">
+    <div class="row g-2">
+      <div class="col-md-4">
+        <label class="form-label form-label-sm">Client Name *</label>
+        <input type="text" name="client_name" class="form-control form-control-sm"
+               value="{{ sizing.client_name if sizing else '' }}" required>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label form-label-sm">Phone</label>
+        <input type="text" name="client_phone" class="form-control form-control-sm"
+               value="{{ sizing.client_phone if sizing else '' }}">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label form-label-sm">Email</label>
+        <input type="email" name="client_email" class="form-control form-control-sm"
+               value="{{ sizing.client_email if sizing else '' }}">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label form-label-sm">Site / Location</label>
+        <input type="text" name="client_site" class="form-control form-control-sm"
+               value="{{ sizing.client_site if sizing else '' }}" placeholder="e.g. Kigo, Wakiso">
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ── SYSTEM PARAMETERS ────────────────────────────────────────────────────── #}
+<div class="card mb-3">
+  <div class="card-header"><span class="section-header mb-0">System Parameters</span></div>
+  <div class="card-body">
+    <div class="row g-2">
+      <div class="col-md-2">
+        <label class="form-label form-label-sm">System Voltage</label>
+        <select name="system_voltage" class="form-select form-select-sm">
+          <option value="12" {% if (sizing.system_voltage if sizing else 48)|int == 12 %}selected{% endif %}>12V (small residential)</option>
+          <option value="48" {% if (sizing.system_voltage if sizing else 48)|int == 48 %}selected{% endif %}>48V (large / commercial)</option>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label form-label-sm">Battery Type</label>
+        <select name="battery_type" class="form-select form-select-sm">
+          <option value="Li-ion" {% if (sizing.battery_type if sizing else 'Li-ion') == 'Li-ion' %}selected{% endif %}>Li-ion / LiFePO4</option>
+          <option value="Lead Acid" {% if (sizing.battery_type if sizing else '') == 'Lead Acid' %}selected{% endif %}>Lead Acid / Tubular Gel</option>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label form-label-sm">Peak Sun Hours</label>
+        <select name="peak_sun_hours" class="form-select form-select-sm">
+          <option value="5.5" {% if (sizing.peak_sun_hours if sizing else 5.5)|float == 5.5 %}selected{% endif %}>5.5 hrs (residential)</option>
+          <option value="6.0" {% if (sizing.peak_sun_hours if sizing else 5.5)|float == 6.0 %}selected{% endif %}>6.0 hrs (commercial / open)</option>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label form-label-sm">Days Autonomy</label>
+        <input type="number" name="days_autonomy" class="form-control form-control-sm"
+               value="{{ sizing.days_autonomy if sizing else 1 }}" min="1" max="3" step="1">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label form-label-sm">DOD</label>
+        <select name="dod" class="form-select form-select-sm">
+          <option value="0.80" {% if (sizing.dod if sizing else 0.80)|float == 0.80 %}selected{% endif %}>0.80 (standard — Li-ion &amp; Eastman gel)</option>
+          <option value="0.70" {% if (sizing.dod if sizing else 0.80)|float == 0.70 %}selected{% endif %}>0.70 (conservative)</option>
+          <option value="0.50" {% if (sizing.dod if sizing else 0.80)|float == 0.50 %}selected{% endif %}>0.50 (deep cycle lead acid, other brands)</option>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label form-label-sm">Performance Ratio</label>
+        <input type="number" name="performance_ratio" class="form-control form-control-sm"
+               value="{{ sizing.performance_ratio if sizing else 0.75 }}" min="0.5" max="1.0" step="0.01">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label form-label-sm">Inverter Idle Draw (W)</label>
+        <input type="number" name="inverter_idle_w" class="form-control form-control-sm"
+               value="{{ sizing.inverter_idle_w if sizing else 50 }}" min="0" step="1">
+        <div class="form-text">No-load consumption added to daily Wh.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ── EQUIPMENT SPECS ──────────────────────────────────────────────────────── #}
+<div class="card mb-3">
+  <div class="card-header"><span class="section-header mb-0">Equipment Specifications</span></div>
+  <div class="card-body">
+
+    {# ── Panel picker ── #}
+    <div class="row g-2 mb-2 align-items-end">
+      <div class="col-12"><small class="text-muted fw-semibold">Solar Panels</small></div>
+      <div class="col-md-4">
+        <label class="form-label form-label-sm">Select from catalog</label>
+        <select class="form-select form-select-sm" onchange="fillPanel(this)">
+          <option value="">— pick a panel —</option>
+          {% for p in catalog['Solar Panel'] %}
+          <option value="{{ p.id }}"
+                  data-wp="{{ p.spec_data.get('wp',0) }}"
+                  data-voc="{{ p.spec_data.get('voc',0) }}"
+                  data-isc="{{ p.spec_data.get('isc',0) }}"
+                  data-price="{{ p.price }}">
+            {{ p.name }}{% if p.spec %} — {{ p.spec }}{% endif %}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="row g-2 mb-2">
+      <div class="col-md-2">
+        <label class="form-label form-label-sm">Panel Wattage (Wp)</label>
+        <input type="number" name="panel_wp" class="form-control form-control-sm"
+               value="{{ sizing.panel_wp if sizing else 550 }}" min="50" step="1">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label form-label-sm">Panel Voc (V)</label>
+        <input type="number" name="panel_voc" class="form-control form-control-sm"
+               value="{{ sizing.panel_voc if sizing else 40.0 }}" min="0" step="0.1">
+        <div class="form-text">Open-circuit voltage (STC)</div>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label form-label-sm">Panel Isc (A)</label>
+        <input type="number" name="panel_isc" class="form-control form-control-sm"
+               value="{{ sizing.panel_isc if sizing else 0 }}" min="0" step="0.01">
+        <div class="form-text">Short-circuit current. Used for CB sizing and string limits.</div>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label form-label-sm">Panel Price to Client (UGX each)</label>
+        <input type="number" name="panel_cost" class="form-control form-control-sm"
+               value="{{ sizing.panel_cost if sizing else 0 }}" min="0" step="1000">
+      </div>
+    </div>
+    <hr class="my-2">
+
+    {# ── Inverter picker + all inverter fields ── #}
+    <div class="row g-2 mb-2 align-items-end">
+      <div class="col-12"><small class="text-muted fw-semibold">Inverter</small></div>
+      <div class="col-md-5">
+        <label class="form-label form-label-sm">Select from catalog</label>
+        <select class="form-select form-select-sm" onchange="fillInverter(this)">
+          <option value="">— pick an inverter —</option>
+          {% for inv in catalog['Inverter'] %}
+          <option value="{{ inv.id }}"
+                  data-kw="{{ inv.spec_data.get('inverter_kw',0) }}"
+                  data-trackers="{{ inv.spec_data.get('mppt_trackers',1) }}"
+                  data-mppt-min="{{ inv.spec_data.get('mppt_min_v',0) }}"
+                  data-mppt-max="{{ inv.spec_data.get('mppt_max_v',0) }}"
+                  data-max-oc="{{ inv.spec_data.get('max_oc_v',0) }}"
+                  data-max-i="{{ inv.spec_data.get('max_input_current_per_tracker',0) }}"
+                  data-max-isc="{{ inv.spec_data.get('max_isc_per_tracker',0) }}"
+                  data-max-pv="{{ inv.spec_data.get('max_pv_power_per_tracker',0) }}"
+                  data-price="{{ inv.price }}">
+            {{ inv.name }}{% if inv.spec %} — {{ inv.spec }}{% endif %}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="row g-2 mb-2">
+      <div class="col-md-2">
+        <label class="form-label form-label-sm">Inverter kW</label>
+        <input type="number" name="inverter_kw" class="form-control form-control-sm"
+               value="{{ sizing.inverter_kw if sizing else 3.5 }}" min="0.5" step="0.5">
+      </div>
+      <div class="col-md-1">
+        <label class="form-label form-label-sm">Trackers</label>
+        <input type="number" name="mppt_trackers" class="form-control form-control-sm"
+               value="{{ sizing.mppt_trackers if sizing else 1 }}" min="1" step="1">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label form-label-sm">MPPT Vmin (V)</label>
+        <input type="number" name="mppt_min_v" class="form-control form-control-sm"
+               value="{{ sizing.mppt_min_v if sizing else 0 }}" min="0" step="0.1">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label form-label-sm">MPPT Vmax (V)</label>
+        <input type="number" name="mppt_max_v" class="form-control form-control-sm"
+               value="{{ sizing.mppt_max_v if sizing else 0 }}" min="0" step="0.1">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label form-label-sm">Max OC Voltage (V)</label>
+        <input type="number" name="max_oc_v" class="form-control form-control-sm"
+               value="{{ sizing.max_oc_v if sizing else 0 }}" min="0" step="0.1">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label form-label-sm">Max Current / Tracker (A)</label>
+        <input type="number" name="max_input_current_per_tracker" class="form-control form-control-sm"
+               value="{{ sizing.max_input_current_per_tracker if sizing else 0 }}" min="0" step="0.1">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label form-label-sm">Max Isc / Tracker (A)</label>
+        <input type="number" name="max_isc_per_tracker" class="form-control form-control-sm"
+               value="{{ sizing.max_isc_per_tracker if sizing else 0 }}" min="0" step="0.1">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label form-label-sm">Max PV Power / Tracker (W)</label>
+        <input type="number" name="max_pv_power_per_tracker" class="form-control form-control-sm"
+               value="{{ sizing.max_pv_power_per_tracker if sizing else 0 }}" min="0" step="100">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label form-label-sm">Inverter Price to Client (UGX)</label>
+        <input type="number" name="inverter_cost" class="form-control form-control-sm"
+               value="{{ sizing.inverter_cost if sizing else 0 }}" min="0" step="1000">
+      </div>
+    </div>
+    <hr class="my-2">
+
+    {# ── Battery picker ── #}
+    <div class="row g-2 mb-2 align-items-end">
+      <div class="col-12"><small class="text-muted fw-semibold">Batteries</small></div>
+      <div class="col-md-4">
+        <label class="form-label form-label-sm">Select from catalog</label>
+        <select class="form-select form-select-sm" onchange="fillBattery(this)">
+          <option value="">— pick a battery —</option>
+          {% for b in catalog['Battery'] %}
+          <option value="{{ b.id }}"
+                  data-ah="{{ b.spec_data.get('ah',0) }}"
+                  data-voltage="{{ b.spec_data.get('voltage',0) }}"
+                  data-chemistry="{{ b.spec_data.get('chemistry','') }}"
+                  data-bank="{{ '1' if b.spec_data.get('is_complete_bank') else '0' }}"
+                  data-price="{{ b.price }}">
+            {{ b.name }}{% if b.spec %} — {{ b.spec }}{% endif %}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="row g-2 mb-2">
+      <div class="col-md-2">
+        <label class="form-label form-label-sm">Battery Ah</label>
+        <input type="number" name="battery_ah" class="form-control form-control-sm"
+               value="{{ sizing.battery_ah if sizing else 200 }}" min="10" step="1">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label form-label-sm">Battery Voltage (V)</label>
+        <select name="battery_voltage" class="form-select form-select-sm">
+          <option value="12" {% if (sizing.battery_voltage if sizing else 12)|float == 12 %}selected{% endif %}>12V</option>
+          <option value="24" {% if (sizing.battery_voltage if sizing else 12)|float == 24 %}selected{% endif %}>24V</option>
+          <option value="48" {% if (sizing.battery_voltage if sizing else 12)|float == 48 %}selected{% endif %}>48V (LiFePO4 pack)</option>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label form-label-sm">Battery Price to Client (UGX each)</label>
+        <input type="number" name="battery_cost_each" class="form-control form-control-sm"
+               value="{{ sizing.battery_cost_each if sizing else 0 }}" min="0" step="1000">
+      </div>
+      <div class="col-md-4 d-flex align-items-end pb-1">
+        <div class="form-check">
+          <input type="hidden" name="battery_is_bank" value="0">
+          <input type="checkbox" name="battery_is_bank" value="1"
+                 class="form-check-input" id="battery_is_bank"
+                 {% if sizing and sizing.battery_is_bank %}checked{% endif %}>
+          <label class="form-check-label small" for="battery_is_bank">
+            Complete voltage bank — no series
+            <span class="text-muted" style="font-size:.7rem">(LiFePO4 pack / pre-assembled bank)</span>
+          </label>
+        </div>
+      </div>
+    </div>
+    <hr class="my-2">
+    <div class="row g-2">
+      <div class="col-12"><small class="text-muted fw-semibold">Labour & Other</small></div>
+      <div class="col-md-3">
+        <label class="form-label form-label-sm">Labour & Transport (UGX)</label>
+        <input type="number" name="labour_transport" class="form-control form-control-sm"
+               value="{{ sizing.labour_transport if sizing else 750000 }}" min="0" step="1000">
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ── UTILITY & FINANCIAL ───────────────────────────────────────────────────── #}
+<div class="card mb-3">
+  <div class="card-header"><span class="section-header mb-0">Utility & Financial Inputs</span></div>
+  <div class="card-body">
+    <div class="row g-2">
+      <div class="col-md-3">
+        <label class="form-label form-label-sm">Utility Provider</label>
+        <input type="text" name="utility_provider" class="form-control form-control-sm"
+               value="{{ sizing.utility_provider if sizing else 'UEDCL' }}"
+               placeholder="e.g. UEDCL, UMEME, KPLC">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label form-label-sm">Utility Tariff (UGX/kWh)</label>
+        <input type="number" name="utility_tariff" class="form-control form-control-sm"
+               value="{{ sizing.utility_tariff if sizing else 897 }}" min="0" step="1">
+        <div class="form-text">Current UEDCL rate incl. VAT. Used for both 10-yr savings and payback period.</div>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label form-label-sm">Tariff Escalation Rate (% / yr)</label>
+        <input type="number" name="tariff_escalation" class="form-control form-control-sm"
+               value="{{ sizing.tariff_escalation if sizing else 4.0 }}" min="0" max="30" step="0.1">
+        <div class="form-text">ERA Uganda CAGR ~4%/yr (2015–2025). Set 0 for flat scenario.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ── APPLIANCE LIST ────────────────────────────────────────────────────────── #}
+<div class="card mb-3">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span class="section-header mb-0">Appliance Load List</span>
+    <button type="button" class="btn btn-sm btn-outline-secondary" id="addApplianceRow">
+      <i class="bi bi-plus"></i> Add Appliance
+    </button>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-sm mb-0" id="applianceTable">
+        <thead>
+          <tr>
+            <th style="width:22%">Appliance Name</th>
+            <th style="width:9%">Type</th>
+            <th style="width:10%">Power (W)<br><span class="text-muted fw-normal" style="font-size:.65rem">Fridge: kWh/yr</span></th>
+            <th style="width:9%">Pwr Factor</th>
+            <th style="width:6%">Qty</th>
+            <th style="width:9%">Hrs/day<br><span class="text-muted fw-normal" style="font-size:.65rem">or Peak W</span></th>
+            <th style="width:8%">Wh/day</th>
+            <th style="width:7%" class="text-center">Inc?</th>
+            <th style="width:4%"></th>
+          </tr>
+        </thead>
+        <tbody id="applianceTbody">
+
+          {% set app_list = appliances if appliances else default_appliances %}
+          {% for a in app_list %}
+          {% set lt = a.load_type if a.load_type is defined else 'standard' %}
+          <tr class="appliance-row" data-loadtype="{{ lt }}">
+            <td><input type="text" name="app_name[]" class="form-control form-control-sm" value="{{ a.name }}" required></td>
+            <td>
+              <select name="app_load_type[]" class="form-select form-select-sm app-loadtype">
+                <option value="standard" {% if lt == 'standard' %}selected{% endif %}>Standard</option>
+                <option value="fridge" {% if lt == 'fridge' %}selected{% endif %}>Fridge</option>
+              </select>
+            </td>
+            <td>
+              {# Standard: power_w field. Fridge: annual_kwh field shown instead #}
+              <div class="field-standard {% if lt == 'fridge' %}d-none{% endif %}">
+                <div class="input-group input-group-sm">
+                  <input type="number" name="app_power_w[]" class="form-control form-control-sm app-power"
+                         value="{{ a.power_w }}" min="0" step="1">
+                  <span class="input-group-text px-1 text-muted" style="font-size:.7rem">W</span>
+                </div>
+              </div>
+              <div class="field-fridge {% if lt != 'fridge' %}d-none{% endif %}">
+                <div class="input-group input-group-sm">
+                  <input type="number" name="app_annual_kwh[]" class="form-control form-control-sm app-annual-kwh"
+                         value="{{ a.annual_kwh if a.annual_kwh is defined else 0 }}" min="0" step="1">
+                  <span class="input-group-text px-1 text-muted" style="font-size:.65rem">kWh/yr</span>
+                </div>
+                {# hidden stub so field arrays stay aligned #}
+                <input type="hidden" name="app_power_w[]" class="app-power-hidden" value="{{ a.power_w }}">
+              </div>
+            </td>
+            <td>
+              <div class="field-standard {% if lt == 'fridge' %}d-none{% endif %}">
+                <select name="app_power_factor[]" class="form-select form-select-sm app-pf">
+                  {% for pf_val, pf_label in [('1.00','1.00'),('0.95','0.95'),('0.85','0.85')] %}
+                  <option value="{{ pf_val }}" {% if '{:.2f}'.format(a.power_factor|float) == pf_val %}selected{% endif %}>{{ pf_label }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="field-fridge {% if lt != 'fridge' %}d-none{% endif %}">
+                <input type="hidden" name="app_power_factor[]" value="1.00">
+                <span class="text-muted small">—</span>
+              </div>
+            </td>
+            <td><input type="number" name="app_qty[]" class="form-control form-control-sm app-qty"
+                       value="{{ a.quantity }}" min="1" step="1"></td>
+            <td>
+              {# Standard: hours. Fridge: peak_w (for inverter sizing) #}
+              <div class="field-standard {% if lt == 'fridge' %}d-none{% endif %}">
+                <input type="number" name="app_hours[]" class="form-control form-control-sm app-hours"
+                       value="{{ a.hours_per_day }}" min="0" max="24" step="0.5" placeholder="hrs">
+              </div>
+              <div class="field-fridge {% if lt != 'fridge' %}d-none{% endif %}">
+                <input type="number" name="app_peak_w[]" class="form-control form-control-sm app-peak-w"
+                       value="{{ a.peak_w if a.peak_w is defined else 0 }}" min="0" step="1" placeholder="W peak">
+                <input type="hidden" name="app_hours[]" class="app-hours-hidden" value="{{ a.hours_per_day }}">
+              </div>
+            </td>
+            <td><span class="app-wh text-muted small">{{ '{:.0f}'.format(a.daily_wh if a.daily_wh else 0) }}</span></td>
+            <td class="text-center">
+              <input type="checkbox" name="app_included[]" value="1"
+                     class="form-check-input app-include" {% if a.included %}checked{% endif %}>
+              <input type="hidden" name="app_included_sentinel[]" value="{{ loop.index }}">
+            </td>
+            <td>
+              <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1 remove-row" title="Remove">
+                <i class="bi bi-x"></i>
+              </button>
+            </td>
+          </tr>
+          {% endfor %}
+
+        </tbody>
+        <tfoot>
+          <tr class="table-secondary">
+            <td colspan="4" class="text-end pe-3 fw-semibold text-white">Daily Total:</td>
+            <td colspan="2"><span id="totalWh" class="fw-bold text-blue" style="font-size:1.05rem">0</span> <span class="text-white">Wh/day</span></td>
+            <td colspan="2"></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+</div>
+
+{# ── NOTES ─────────────────────────────────────────────────────────────────── #}
+<div class="card mb-3">
+  <div class="card-body">
+    <label class="form-label form-label-sm">Notes</label>
+    <textarea name="notes" class="form-control form-control-sm" rows="2">{{ sizing.notes if sizing else '' }}</textarea>
+  </div>
+</div>
+
+<div class="d-flex gap-2">
+  <button type="submit" class="btn btn-primary">
+    <i class="bi bi-calculator"></i> Calculate &amp; Save
+  </button>
+  <a href="{{ url_for('solar_list') }}" class="btn btn-outline-secondary">Cancel</a>
+  {% if sizing %}
+  <form method="post" action="{{ url_for('solar_delete', sid=sizing.id) }}"
+        class="ms-auto"
+        onsubmit="return confirm('Delete this sizing?')">
+    <button class="btn btn-outline-danger btn-sm">Delete</button>
+  </form>
+  {% endif %}
+</div>
+
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  // ── Live Wh/day calculation ──────────────────────────────────────────────
+  function calcWh(row) {
+    const inc      = row.querySelector('.app-include').checked;
+    const qty      = parseFloat(row.querySelector('.app-qty').value) || 1;
+    const loadtype = row.querySelector('.app-loadtype').value;
+    let wh = 0;
+
+    if (loadtype === 'fridge') {
+      const annualKwh = parseFloat(row.querySelector('.app-annual-kwh')?.value) || 0;
+      wh = annualKwh * 1000 / 365 * qty;
+    } else {
+      const pw  = parseFloat(row.querySelector('.app-power')?.value) || 0;
+      const pf  = parseFloat(row.querySelector('.app-pf')?.value) || 1;
+      const hrs = parseFloat(row.querySelector('.app-hours')?.value) || 0;
+      wh = pw * pf * qty * hrs;
+    }
+    wh = inc ? wh : 0;
+    row.querySelector('.app-wh').textContent = Math.round(wh).toLocaleString();
+    return wh;
+  }
+
+  function updateTotal() {
+    let total = 0;
+    document.querySelectorAll('.appliance-row').forEach(r => { total += calcWh(r); });
+    document.getElementById('totalWh').textContent = Math.round(total).toLocaleString();
+  }
+
+  // ── Toggle fridge / standard fields ─────────────────────────────────────
+  function applyLoadType(row) {
+    const lt = row.querySelector('.app-loadtype').value;
+    row.querySelectorAll('.field-standard').forEach(el => el.classList.toggle('d-none', lt === 'fridge'));
+    row.querySelectorAll('.field-fridge').forEach(el => el.classList.toggle('d-none', lt !== 'fridge'));
+    calcWh(row);
+  }
+
+  document.getElementById('applianceTbody').addEventListener('change', function (e) {
+    if (e.target.classList.contains('app-loadtype')) {
+      applyLoadType(e.target.closest('.appliance-row'));
+    }
+    updateTotal();
+  });
+  document.getElementById('applianceTbody').addEventListener('input', updateTotal);
+  updateTotal();
+
+  // ── Add row ──────────────────────────────────────────────────────────────
+  document.getElementById('addApplianceRow').addEventListener('click', function () {
+    const tbody = document.getElementById('applianceTbody');
+    const idx   = tbody.querySelectorAll('.appliance-row').length + 1;
+    const tr = document.createElement('tr');
+    tr.className = 'appliance-row';
+    tr.dataset.loadtype = 'standard';
+    tr.innerHTML = `
+      <td><input type="text" name="app_name[]" class="form-control form-control-sm" required></td>
+      <td>
+        <select name="app_load_type[]" class="form-select form-select-sm app-loadtype">
+          <option value="standard" selected>Standard</option>
+          <option value="fridge">Fridge</option>
+        </select>
+      </td>
+      <td>
+        <div class="field-standard">
+          <div class="input-group input-group-sm">
+            <input type="number" name="app_power_w[]" class="form-control form-control-sm app-power" value="0" min="0" step="1">
+            <span class="input-group-text px-1 text-muted" style="font-size:.7rem">W</span>
+          </div>
+        </div>
+        <div class="field-fridge d-none">
+          <div class="input-group input-group-sm">
+            <input type="number" name="app_annual_kwh[]" class="form-control form-control-sm app-annual-kwh" value="0" min="0" step="1">
+            <span class="input-group-text px-1 text-muted" style="font-size:.65rem">kWh/yr</span>
+          </div>
+          <input type="hidden" name="app_power_w[]" class="app-power-hidden" value="0">
+        </div>
+      </td>
+      <td>
+        <div class="field-standard">
+          <select name="app_power_factor[]" class="form-select form-select-sm app-pf">
+            <option value="1.00">1.00</option>
+            <option value="0.95">0.95</option>
+            <option value="0.85" selected>0.85</option>
+          </select>
+        </div>
+        <div class="field-fridge d-none">
+          <input type="hidden" name="app_power_factor[]" value="1.00">
+          <span class="text-muted small">—</span>
+        </div>
+      </td>
+      <td><input type="number" name="app_qty[]" class="form-control form-control-sm app-qty" value="1" min="1" step="1"></td>
+      <td>
+        <div class="field-standard">
+          <input type="number" name="app_hours[]" class="form-control form-control-sm app-hours" value="0" min="0" max="24" step="0.5" placeholder="hrs">
+        </div>
+        <div class="field-fridge d-none">
+          <input type="number" name="app_peak_w[]" class="form-control form-control-sm app-peak-w" value="0" min="0" step="1" placeholder="W peak">
+          <input type="hidden" name="app_hours[]" class="app-hours-hidden" value="0">
+        </div>
+      </td>
+      <td><span class="app-wh text-muted small">0</span></td>
+      <td class="text-center">
+        <input type="checkbox" name="app_included[]" value="1" class="form-check-input app-include" checked>
+        <input type="hidden" name="app_included_sentinel[]" value="${idx}">
+      </td>
+      <td>
+        <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1 remove-row">
+          <i class="bi bi-x"></i>
+        </button>
+      </td>`;
+    tbody.appendChild(tr);
+    tr.querySelector('[name="app_name[]"]').focus();
+  });
+
+  // ── Remove row ───────────────────────────────────────────────────────────
+  document.getElementById('applianceTbody').addEventListener('click', function (e) {
+    const btn = e.target.closest('.remove-row');
+    if (!btn) return;
+    btn.closest('tr').remove();
+    updateTotal();
+  });
+})();
+
+// ── Catalog auto-fill ─────────────────────────────────────────────────────
+function fillPanel(sel) {
+  const o = sel.options[sel.selectedIndex];
+  if (!o.value) return;
+  setVal('panel_wp',   o.dataset.wp);
+  setVal('panel_voc',  o.dataset.voc);
+  setVal('panel_isc',  o.dataset.isc);
+  setVal('panel_cost', o.dataset.price);
+}
+
+function fillBattery(sel) {
+  const o = sel.options[sel.selectedIndex];
+  if (!o.value) return;
+  setVal('battery_ah',         o.dataset.ah);
+  setVal('battery_cost_each',  o.dataset.price);
+  // voltage select
+  const vs = document.querySelector('[name="battery_voltage"]');
+  if (vs && o.dataset.voltage) {
+    [...vs.options].forEach(opt => { opt.selected = parseFloat(opt.value) === parseFloat(o.dataset.voltage); });
+  }
+  // battery_type select — map chemistry to form options
+  const chem = o.dataset.chemistry || '';
+  const ts = document.querySelector('[name="battery_type"]');
+  if (ts) {
+    if (chem.toLowerCase().includes('li') || chem.toLowerCase().includes('lfp')) {
+      [...ts.options].forEach(opt => { opt.selected = opt.value === 'Li-ion'; });
+    } else if (chem) {
+      [...ts.options].forEach(opt => { opt.selected = opt.value === 'Lead Acid'; });
+    }
+  }
+  // battery_is_bank checkbox
+  const cb = document.getElementById('battery_is_bank');
+  if (cb) cb.checked = o.dataset.bank === '1';
+}
+
+function fillInverter(sel) {
+  const o = sel.options[sel.selectedIndex];
+  if (!o.value) return;
+  setVal('inverter_kw',                    o.dataset.kw);
+  setVal('inverter_cost',                  o.dataset.price);
+  setVal('mppt_trackers',                  o.dataset.trackers);
+  setVal('mppt_min_v',                     o.dataset.mpptMin);
+  setVal('mppt_max_v',                     o.dataset.mpptMax);
+  setVal('max_oc_v',                       o.dataset.maxOc);
+  setVal('max_input_current_per_tracker',  o.dataset.maxI);
+  setVal('max_isc_per_tracker',            o.dataset.maxIsc);
+  setVal('max_pv_power_per_tracker',       o.dataset.maxPv);
+}
+
+function setVal(name, val) {
+  const el = document.querySelector('[name="' + name + '"]');
+  if (el && val !== undefined && val !== '' && val !== '0') el.value = val;
+}
+</script>
+{% endblock %}

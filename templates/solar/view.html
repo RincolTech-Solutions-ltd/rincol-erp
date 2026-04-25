@@ -1,0 +1,342 @@
+{% extends "base.html" %}
+{% block title %}Solar Sizing — {{ s.client_name }}{% endblock %}
+{% block breadcrumb %}
+  <a href="{{ url_for('solar_list') }}" class="text-muted text-decoration-none">Solar Sizing</a>
+  &rsaquo; {{ s.client_name }}
+{% endblock %}
+
+{% macro money(v) %}UGX {{ '{:,.0f}'.format(v or 0) }}{% endmacro %}
+
+{% block content %}
+{# ── Header ────────────────────────────────────────────────────────────── #}
+<div class="d-flex justify-content-between align-items-start mb-3">
+  <div>
+    <h5 class="mb-1">{{ s.client_name }}</h5>
+    <div class="text-muted small">
+      {% if s.client_site %}{{ s.client_site }} &bull; {% endif %}
+      {% if s.client_phone %}{{ s.client_phone }} &bull; {% endif %}
+      {{ s.system_voltage }}V &bull; {{ s.battery_type }}
+      &bull;
+      {% if s.status == 'Sent' %}<span class="badge badge-completed">Sent</span>
+      {% elif s.status == 'Archived' %}<span class="badge badge-cancelled">Archived</span>
+      {% else %}<span class="badge badge-pending">Draft</span>{% endif %}
+    </div>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('solar_edit', sid=s.id) }}" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-pencil"></i> Edit
+    </a>
+    <a href="{{ url_for('solar_pptx', sid=s.id) }}" class="btn btn-sm btn-outline-primary">
+      <i class="bi bi-file-earmark-slides"></i> PPTX Proposal
+    </a>
+    {% if not s.quotation_id %}
+    <form method="post" action="{{ url_for('solar_to_quotation', sid=s.id) }}">
+      <button class="btn btn-sm btn-primary">
+        <i class="bi bi-file-earmark-text"></i> Send to Quotation
+      </button>
+    </form>
+    {% else %}
+    <a href="{{ url_for('quotations_view', qid=s.quotation_id) }}" class="btn btn-sm btn-success">
+      <i class="bi bi-check2"></i> View Quotation
+    </a>
+    {% endif %}
+  </div>
+</div>
+
+{% if s.quotation_id %}
+<div class="alert alert-success py-2 small mb-3">
+  Linked to quotation <a href="{{ url_for('quotations_view', qid=s.quotation_id) }}" class="alert-link">{{ quotation_no }}</a>.
+</div>
+{% endif %}
+
+{% if r.inverter_flag %}
+<div class="alert alert-warning py-2 small mb-3">
+  <i class="bi bi-exclamation-triangle"></i> {{ r.inverter_flag }}
+</div>
+{% endif %}
+
+{% if r.panel_array_flag %}
+<div class="alert alert-warning py-2 small mb-3">
+  <i class="bi bi-exclamation-triangle"></i> {{ r.panel_array_flag }}
+</div>
+{% endif %}
+
+{% if r.voltage_override %}
+<div class="alert alert-info py-2 small mb-3">
+  <i class="bi bi-info-circle"></i>
+  <strong>Voltage constraint applied.</strong>
+  Energy needed {{ r.panels_by_energy }} panel(s), but MPPT minimum voltage requires
+  {{ r.panels_in_series }}S per string &rarr; {{ r.panels_recommended }} panels total
+  ({{ r.strings_total }} string(s) &times; {{ r.panels_in_series }} in series).
+</div>
+{% endif %}
+
+<div class="row g-3">
+
+{# ── LEFT COLUMN ──────────────────────────────────────────────────────── #}
+<div class="col-lg-7">
+
+  {# Engineering Summary #}
+  <div class="card mb-3">
+    <div class="card-header"><span class="section-header mb-0">Engineering Summary</span></div>
+    <div class="card-body">
+      <div class="row text-center mb-3 g-2">
+        <div class="col-4">
+          <div class="small text-muted">Daily Load</div>
+          <div class="fw-bold text-blue">{{ '{:,.0f}'.format(r.total_daily_wh or 0) }} Wh</div>
+        </div>
+        <div class="col-4">
+          <div class="small text-muted">Peak Demand</div>
+          <div class="fw-bold">{{ '{:,.0f}'.format(r.peak_load_w or 0) }} W</div>
+        </div>
+        <div class="col-4">
+          <div class="small text-muted">Annual Yield</div>
+          <div class="fw-bold text-green">{{ '{:,.0f}'.format(r.annual_yield_kwh or 0) }} kWh/yr</div>
+        </div>
+      </div>
+
+      <table class="table table-sm mb-0">
+        <tbody>
+          <tr>
+            <td class="text-muted">Battery Ah required</td>
+            <td class="fw-semibold">{{ '{:,.1f}'.format(r.battery_ah_min or 0) }} Ah</td>
+            <td class="text-muted">Configuration</td>
+            <td class="fw-semibold">{{ r.batteries_in_series }}S × {{ r.batteries_in_parallel }}P = {{ r.total_batteries }} units</td>
+          </tr>
+          <tr>
+            <td class="text-muted">Battery spec</td>
+            <td>{{ '{:.0f}'.format(s.battery_ah) }}Ah / {{ '{:.0f}'.format(s.battery_voltage) }}V {{ s.battery_type }}</td>
+            <td class="text-muted">DOD applied</td>
+            <td>{{ s.dod }}</td>
+          </tr>
+          <tr>
+            <td class="text-muted">Required array</td>
+            <td class="fw-semibold">{{ '{:,.0f}'.format(r.required_wp or 0) }} Wp</td>
+            <td class="text-muted">Panels (energy)</td>
+            <td>{{ r.panels_by_energy }} × {{ '{:.0f}'.format(s.panel_wp) }}Wp</td>
+          </tr>
+          <tr>
+            <td class="text-muted">Panels installed</td>
+            <td class="fw-bold {% if r.voltage_override %}text-warning{% endif %}">{{ r.panels_recommended }} panels</td>
+            <td class="text-muted">Array arrangement</td>
+            <td>
+              {{ r.panels_in_series }}S &times; {{ r.strings_total }}P
+              {% if s.mppt_trackers and s.mppt_trackers > 1 %}
+                &bull; {{ r.strings_per_tracker }} str/tracker &times; {{ s.mppt_trackers }} trackers
+              {% endif %}
+            </td>
+          </tr>
+          <tr>
+            <td class="text-muted">Inverter</td>
+            <td>{{ s.inverter_kw }} kW / {{ s.system_voltage }}V</td>
+            <td class="text-muted">Panel Voc</td>
+            <td>{{ s.panel_voc }}V</td>
+          </tr>
+          <tr>
+            <td class="text-muted">PSH / PR</td>
+            <td colspan="3">{{ s.peak_sun_hours }} hrs/day &bull; PR {{ s.performance_ratio }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {# Appliance Load List #}
+  <div class="card mb-3">
+    <div class="card-header"><span class="section-header mb-0">Appliance Load List</span></div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-sm mb-0">
+          <thead>
+            <tr>
+              <th>Appliance</th>
+              <th>Type</th>
+              <th class="text-end">Power / Annual</th>
+              <th class="text-end">PF</th>
+              <th class="text-end">Qty</th>
+              <th class="text-end">Hrs/Peak W</th>
+              <th class="text-end">Wh/day</th>
+              <th class="text-center">Inc.</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for a in appliances %}
+            {% set lt = a.load_type if a.load_type else 'standard' %}
+            <tr {% if not a.included %}class="text-muted"{% endif %}>
+              <td>{{ a.name }}</td>
+              <td class="text-muted small">{{ lt | title }}</td>
+              <td class="text-end small">
+                {% if lt == 'fridge' %}
+                  {{ '{:.0f}'.format(a.annual_kwh or 0) }} kWh/yr
+                {% else %}
+                  {{ '{:.0f}'.format(a.power_w) }} W
+                {% endif %}
+              </td>
+              <td class="text-end">{{ '{:.2f}'.format(a.power_factor) if lt != 'fridge' else '—' }}</td>
+              <td class="text-end">{{ a.quantity }}</td>
+              <td class="text-end small">
+                {% if lt == 'fridge' %}
+                  {{ '{:.0f}'.format(a.peak_w or 0) }} W pk
+                {% else %}
+                  {{ '{:.1f}'.format(a.hours_per_day) }} hr
+                {% endif %}
+              </td>
+              <td class="text-end {% if a.included %}fw-semibold{% endif %}">
+                {{ '{:,.0f}'.format(a.daily_wh or 0) }}
+              </td>
+              <td class="text-center">
+                {% if a.included %}<i class="bi bi-check2 text-green"></i>{% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+          <tfoot>
+            <tr class="text-muted">
+              <td colspan="6" class="text-end small">Inverter idle draw ({{ '{:.0f}'.format(s.inverter_idle_w or 50) }}W × 24h):</td>
+              <td class="text-end small">+ {{ '{:,.0f}'.format(r.inverter_idle_wh or 0) }}</td>
+              <td></td>
+            </tr>
+            <tr class="fw-bold border-top">
+              <td colspan="6" class="text-end">Daily Total (incl. idle):</td>
+              <td class="text-end text-blue">{{ '{:,.0f}'.format(r.total_daily_wh or 0) }} Wh</td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div>{# end left col #}
+
+{# ── RIGHT COLUMN ─────────────────────────────────────────────────────── #}
+<div class="col-lg-5">
+
+  {# Financial Appraisal #}
+  <div class="card mb-3">
+    <div class="card-header"><span class="section-header mb-0">Financial Appraisal</span></div>
+    <div class="card-body">
+      <div class="mb-2 pb-2 border-bottom">
+        <div class="small text-muted mb-1">Section C — 10-Year Cost of Ownership</div>
+        <div class="small text-muted">
+          {{ s.utility_provider }} tariff: UGX {{ '{:,.0f}'.format(s.utility_tariff) }}/kWh
+          {% if s.tariff_escalation %}
+            &bull; escalation: {{ '{:.1f}'.format(s.tariff_escalation) }}%/yr (compounded)
+          {% else %}
+            &bull; flat rate (0% escalation)
+          {% endif %}
+        </div>
+      </div>
+      <table class="table table-sm mb-0">
+        <tbody>
+          <tr>
+            <td class="text-muted">System cost</td>
+            <td class="text-end fw-semibold">{{ money(r.system_cost) }}</td>
+          </tr>
+          <tr>
+            <td class="text-muted">10-yr maintenance
+              <span class="text-muted" style="font-size:.7rem">
+                ({% if s.battery_type == 'Lead Acid' %}battery replacement{% else %}none — Li-ion{% endif %})
+              </span>
+            </td>
+            <td class="text-end {% if r.maintenance_cost_10yr > 0 %}text-warning{% else %}text-green{% endif %}">
+              {{ money(r.maintenance_cost_10yr) }}
+            </td>
+          </tr>
+          <tr class="fw-bold">
+            <td>Cost of ownership (10yr)</td>
+            <td class="text-end">{{ money((r.system_cost or 0) + (r.maintenance_cost_10yr or 0)) }}</td>
+          </tr>
+          <tr>
+            <td class="text-muted">Solar cost/kWh</td>
+            <td class="text-end text-blue fw-semibold">{{ money(r.solar_cost_per_kwh) }}/kWh</td>
+          </tr>
+          <tr>
+            <td class="text-muted">10-yr yield</td>
+            <td class="text-end">{{ '{:,.0f}'.format((r.annual_yield_kwh or 0) * 10) }} kWh</td>
+          </tr>
+          <tr class="{% if r.yaka_savings_10yr > 0 %}text-success{% else %}text-warning{% endif %} fw-bold">
+            <td>10-yr savings vs {{ s.utility_provider }}</td>
+            <td class="text-end">{{ money(r.yaka_savings_10yr) }}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <hr class="my-3">
+      <div class="small text-muted mb-2">Section D — Payback Period</div>
+      <div class="text-muted small mb-1">Tariff: UGX {{ '{:,.0f}'.format(s.utility_tariff) }}/kWh</div>
+      <div class="row text-center mt-2">
+        <div class="col-6">
+          <div class="small text-muted">Annual savings</div>
+          <div class="fw-bold text-green">{{ money((r.annual_yield_kwh or 0) * s.utility_tariff) }}</div>
+        </div>
+        <div class="col-6">
+          <div class="small text-muted">Payback period</div>
+          <div class="fw-bold {% if r.payback_years and r.payback_years < 5 %}text-green{% elif r.payback_years %}text-blue{% endif %}">
+            {{ '{:.2f}'.format(r.payback_years or 0) }} years
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# BoM #}
+  <div class="card mb-3">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span class="section-header mb-0">
+        Bill of Materials
+        {% if s.bom_locked %}<span class="badge bg-warning text-dark ms-1" style="font-size:.65rem"><i class="bi bi-lock-fill"></i> locked</span>{% endif %}
+      </span>
+      <div class="d-flex gap-2 align-items-center">
+        <span class="text-muted small">Total: {{ money(bom_total) }}</span>
+        <a href="{{ url_for('solar_bom_edit', sid=s.id) }}" class="btn btn-xs btn-outline-secondary py-0 px-2" style="font-size:.75rem">
+          <i class="bi bi-pencil"></i> Edit BoM
+        </a>
+      </div>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-sm mb-0">
+          <thead>
+            <tr>
+              <th>Description</th>
+              <th class="text-center">UoM</th>
+              <th class="text-end">Qty</th>
+              <th class="text-end">Unit (UGX)</th>
+              <th class="text-end">Total (UGX)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in bom %}
+            <tr>
+              <td class="small">{{ item.description }}</td>
+              <td class="text-center small text-muted">{{ item.uom }}</td>
+              <td class="text-end small">{{ '{:,.0f}'.format(item.qty) }}</td>
+              <td class="text-end small text-muted">{{ '{:,.0f}'.format(item.unit_price) }}</td>
+              <td class="text-end small fw-semibold">{{ '{:,.0f}'.format(item.total) }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+          <tfoot>
+            <tr class="fw-bold">
+              <td colspan="4" class="text-end">Total</td>
+              <td class="text-end">{{ '{:,.0f}'.format(bom_total) }}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  {% if s.notes %}
+  <div class="card mb-3">
+    <div class="card-body">
+      <div class="small text-muted fw-semibold mb-1">Notes</div>
+      <div class="small">{{ s.notes }}</div>
+    </div>
+  </div>
+  {% endif %}
+
+</div>{# end right col #}
+</div>{# end row #}
+{% endblock %}

@@ -73,6 +73,12 @@
           <i class="bi bi-check2-square"></i> Tasks
         </a>
       </li>
+      <hr class="sidebar-divider">
+      <li class="nav-item">
+        <a href="{{ url_for('solar_list') }}" class="nav-link {% if 'solar' in request.endpoint %}active{% endif %}">
+          <i class="bi bi-sun"></i> Solar Sizing
+        </a>
+      </li>
     </ul>
 
     <div class="sidebar-user mt-auto pt-3 border-top border-secondary">
@@ -144,8 +150,8 @@
     // Skip external, mailto, tel, javascript, hash-only
     if (!href || /^(https?:|mailto:|tel:|javascript:|#)/.test(href)) return;
     show();
-    // PDF downloads don't navigate — hide spinner after download starts
-    if (href.includes('/pdf')) {
+    // File downloads don't navigate — hide spinner after download starts
+    if (href.includes('/pdf') || href.includes('/pptx')) {
       setTimeout(hide, 3500);
     }
   });

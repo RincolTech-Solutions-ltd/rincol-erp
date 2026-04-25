@@ -1,6 +1,7 @@
 """Rincol Web ERP — Flask Application."""
 import os
 import io
+import json
 import uuid
 from datetime import date, datetime
 from functools import wraps
@@ -559,21 +560,77 @@ def catalog_list():
 def catalog_edit(item_id=None):
     item = query_one("SELECT * FROM catalog_items WHERE id=%s", (item_id,)) if item_id else None
     if request.method == "POST":
-        f  = request.form
-        iid = item_id or f.get("id") or str(uuid.uuid4())[:8].upper()
-        execute("""INSERT INTO catalog_items (id,category,name,spec,uom,buy_price,sell_price,supplier_id,notes)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
-            ON CONFLICT (id) DO UPDATE SET
-            category=EXCLUDED.category,name=EXCLUDED.name,spec=EXCLUDED.spec,
-            uom=EXCLUDED.uom,buy_price=EXCLUDED.buy_price,sell_price=EXCLUDED.sell_price,
-            supplier_id=EXCLUDED.supplier_id,notes=EXCLUDED.notes""",
-            (iid,f["category"],f["name"],f.get("spec",""),f.get("uom","pc"),
-             int(f.get("buy_price",0)),int(f.get("sell_price",0)),
-             f.get("supplier_id",""),f.get("notes","")))
-        flash("Item saved.","success")
+        f       = request.form
+        iid     = item_id or f.get("id") or str(uuid.uuid4())[:8].upper()
+        cat     = f["category"]
+
+        # Build spec_data from category-specific fields
+        spec_data = {}
+        if cat == "Solar Panel":
+            spec_data = {
+                "wp":   float(f.get("spec_wp") or 0),
+                "voc":  float(f.get("spec_voc") or 0),
+                "vmpp": float(f.get("spec_vmpp") or 0),
+                "isc":  float(f.get("spec_isc") or 0),
+                "impp": float(f.get("spec_impp") or 0),
+            }
+        elif cat == "Inverter":
+            spec_data = {
+                "controller_type":                f.get("spec_controller_type", "MPPT"),
+                "battery_voltage":                float(f.get("spec_battery_voltage") or 0),
+                "inverter_kw":                    float(f.get("spec_inverter_kw") or 0),
+                "mppt_min_v":                     float(f.get("spec_mppt_min_v") or 0),
+                "mppt_max_v":                     float(f.get("spec_mppt_max_v") or 0),
+                "max_oc_v":                       float(f.get("spec_max_oc_v") or 0),
+                "mppt_trackers":                  int(f.get("spec_mppt_trackers") or 1),
+                "max_charge_a":                   float(f.get("spec_max_charge_a") or 0),
+                "max_pv_power_per_tracker":       float(f.get("spec_max_pv_power_per_tracker") or 0),
+                "max_input_current_per_tracker":  float(f.get("spec_max_input_current_per_tracker") or 0),
+                "max_isc_per_tracker":            float(f.get("spec_max_isc_per_tracker") or 0),
+            }
+        elif cat == "Charge Controller":
+            spec_data = {
+                "controller_type": f.get("spec_controller_type", "MPPT"),
+                "battery_voltage": float(f.get("spec_battery_voltage") or 0),
+                "max_charge_a":    float(f.get("spec_max_charge_a") or 0),
+                "mppt_min_v":      float(f.get("spec_mppt_min_v") or 0),
+                "mppt_max_v":      float(f.get("spec_mppt_max_v") or 0),
+                "max_oc_v":        float(f.get("spec_max_oc_v") or 0),
+            }
+        elif cat == "Battery":
+            spec_data = {
+                "ah":              float(f.get("spec_ah") or 0),
+                "voltage":         float(f.get("spec_voltage") or 0),
+                "chemistry":       f.get("spec_chemistry", ""),
+                "dod_rated":       float(f.get("spec_dod_rated") or 0.8),
+                "is_complete_bank": f.get("spec_is_complete_bank") == "1",
+            }
+
+        execute("""INSERT INTO catalog_items
+                   (id,category,name,spec,uom,buy_price,sell_price,supplier_id,notes,spec_data)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                   ON CONFLICT (id) DO UPDATE SET
+                   category=EXCLUDED.category, name=EXCLUDED.name, spec=EXCLUDED.spec,
+                   uom=EXCLUDED.uom, buy_price=EXCLUDED.buy_price,
+                   sell_price=EXCLUDED.sell_price, supplier_id=EXCLUDED.supplier_id,
+                   notes=EXCLUDED.notes, spec_data=EXCLUDED.spec_data""",
+                (iid, cat, f["name"], f.get("spec",""), f.get("uom","pc"),
+                 int(f.get("buy_price",0)), int(f.get("sell_price",0)),
+                 f.get("supplier_id",""), f.get("notes",""), json.dumps(spec_data)))
+        flash("Item saved.", "success")
         return redirect(url_for("catalog_list"))
+
     categories = ["Battery","Inverter","Solar Panel","Charge Controller","Cable","Accessory","Service"]
-    return render_template("catalog/form.html", item=item, categories=categories)
+    suppliers  = query("SELECT id, name FROM service_providers ORDER BY name")
+    # Parse spec_data so the template can access it as a dict
+    if item and item.get("spec_data"):
+        sd = item["spec_data"]
+        item = dict(item)
+        item["spec_data"] = sd if isinstance(sd, dict) else json.loads(sd)
+    elif item:
+        item = dict(item)
+        item["spec_data"] = {}
+    return render_template("catalog/form.html", item=item, categories=categories, suppliers=suppliers)
 
 
 @app.route("/catalog/<item_id>/delete", methods=["POST"])
@@ -1058,6 +1115,551 @@ def api_template(tid):
         "LEFT JOIN catalog_items ci ON ci.id=ti.catalog_item_id "
         "WHERE ti.template_id=%s ORDER BY ti.description, ti.id", (tid,))
     return jsonify([dict(i) for i in items])
+
+
+# ── Solar Sizing ───────────────────────────────────────────────────────────────
+from utils.solar import calc_sizing, build_bom
+from utils.solar_pptx import build_proposal
+
+_DEFAULT_APPLIANCES = [
+    {"name": "LED Bulb (10W)",       "power_w": 10,  "power_factor": 0.95, "quantity": 6,  "hours_per_day": 6,   "included": True, "daily_wh": 0},
+    {"name": "LED TV (55 inch)",     "power_w": 80,  "power_factor": 0.85, "quantity": 1,  "hours_per_day": 5,   "included": True, "daily_wh": 0},
+    {"name": "Wi-Fi Router",         "power_w": 12,  "power_factor": 0.85, "quantity": 1,  "hours_per_day": 18,  "included": True, "daily_wh": 0},
+    {"name": "Phone Charging",       "power_w": 15,  "power_factor": 0.85, "quantity": 3,  "hours_per_day": 2,   "included": True, "daily_wh": 0},
+    {"name": "Laptop",               "power_w": 65,  "power_factor": 0.85, "quantity": 1,  "hours_per_day": 4,   "included": False, "daily_wh": 0},
+    {"name": "Refrigerator (150L)",  "load_type": "fridge", "annual_kwh": 200, "peak_w": 300, "power_w": 0, "power_factor": 0.85, "quantity": 1, "hours_per_day": 0, "included": False, "daily_wh": 0},
+    {"name": "Water Pump (0.5HP)",   "power_w": 400, "power_factor": 0.85, "quantity": 1,  "hours_per_day": 1,   "included": False, "daily_wh": 0},
+]
+
+
+def _parse_appliances_from_form(f):
+    """Extract appliance rows from form POST data."""
+    names      = f.getlist("app_name[]")
+    load_types = f.getlist("app_load_type[]")
+    powers     = f.getlist("app_power_w[]")
+    annual_kwhs = f.getlist("app_annual_kwh[]")
+    peak_ws    = f.getlist("app_peak_w[]")
+    pfs        = f.getlist("app_power_factor[]")
+    qtys       = f.getlist("app_qty[]")
+    hours      = f.getlist("app_hours[]")
+    sentinels  = f.getlist("app_included_sentinel[]")
+
+    # Checkboxes only post when checked; sentinels define total row count
+    included_values = f.getlist("app_included[]")
+    included_flags  = []
+    inc_iter = iter(included_values)
+    for _ in sentinels:
+        try:
+            next(inc_iter)
+            included_flags.append(True)
+        except StopIteration:
+            included_flags.append(False)
+
+    appliances = []
+    for i, name in enumerate(names):
+        if not name.strip():
+            continue
+        lt = load_types[i] if i < len(load_types) else 'standard'
+        appliances.append({
+            "name":          name.strip(),
+            "load_type":     lt,
+            "power_w":       float(powers[i] or 0) if i < len(powers) else 0,
+            "annual_kwh":    float(annual_kwhs[i] or 0) if i < len(annual_kwhs) else 0,
+            "peak_w":        float(peak_ws[i] or 0) if i < len(peak_ws) else 0,
+            "power_factor":  float(pfs[i] or 1.0) if i < len(pfs) else 1.0,
+            "quantity":      int(qtys[i] or 1) if i < len(qtys) else 1,
+            "hours_per_day": float(hours[i] or 0) if i < len(hours) else 0,
+            "included":      included_flags[i] if i < len(included_flags) else True,
+            "daily_wh":      0,
+        })
+    return appliances
+
+
+def _params_from_form(f):
+    return {
+        "system_voltage":     int(f.get("system_voltage", 48)),
+        "battery_type":       f.get("battery_type", "Li-ion"),
+        "days_autonomy":      int(f.get("days_autonomy", 1)),
+        "dod":                float(f.get("dod", 0.80)),
+        "inverter_efficiency": float(f.get("inverter_efficiency", 0.90)),
+        "cable_efficiency":   float(f.get("cable_efficiency", 0.95)),
+        "inverter_idle_w":    float(f.get("inverter_idle_w", 50)),
+        "peak_sun_hours":     float(f.get("peak_sun_hours", 5.5)),
+        "performance_ratio":  float(f.get("performance_ratio", 0.75)),
+        "panel_wp":                          float(f.get("panel_wp", 550)),
+        "panel_voc":                         float(f.get("panel_voc", 40.0)),
+        "panel_isc":                         float(f.get("panel_isc", 0)),
+        "panel_cost":                        float(f.get("panel_cost", 0)),
+        "mppt_trackers":                     int(f.get("mppt_trackers", 1)),
+        "mppt_min_v":                        float(f.get("mppt_min_v", 0)),
+        "mppt_max_v":                        float(f.get("mppt_max_v", 0)),
+        "max_oc_v":                          float(f.get("max_oc_v", 0)),
+        "max_input_current_per_tracker":     float(f.get("max_input_current_per_tracker", 0)),
+        "max_isc_per_tracker":               float(f.get("max_isc_per_tracker", 0)),
+        "max_pv_power_per_tracker":          float(f.get("max_pv_power_per_tracker", 0)),
+        "battery_ah":         float(f.get("battery_ah", 200)),
+        "battery_voltage":    float(f.get("battery_voltage", 12)),
+        "battery_cost_each":  float(f.get("battery_cost_each", 0)),
+        "inverter_kw":        float(f.get("inverter_kw", 3.5)),
+        "inverter_cost":      float(f.get("inverter_cost", 0)),
+        "labour_transport":   float(f.get("labour_transport", 750000)),
+        "utility_provider":   f.get("utility_provider", "UEDCL"),
+        "utility_tariff":     float(f.get("utility_tariff", 897)),
+        "tariff_escalation":  float(f.get("tariff_escalation", 4.0)) / 100,  # convert % → decimal
+        "battery_is_bank":    f.get("battery_is_bank") == "1",
+    }
+
+
+def _recompute_financials(results, bom_total, params):
+    """Patch results dict with financial metrics derived from the true BoM total."""
+    maint    = results['maintenance_cost_10yr']
+    coo_10yr = bom_total + maint
+    ten_yr   = results['annual_yield_kwh'] * 10
+    util_t   = params['utility_tariff']
+    tariff_e = params['tariff_escalation']  # already decimal (0.04 = 4%)
+    if tariff_e > 0:
+        ten_yr_grid = sum(results['annual_yield_kwh'] * util_t * ((1 + tariff_e) ** yr) for yr in range(10))
+    else:
+        ten_yr_grid = ten_yr * util_t
+    annual_sav = results['annual_yield_kwh'] * util_t
+    results['system_cost']        = round(bom_total, 0)
+    results['solar_cost_per_kwh'] = round(coo_10yr / ten_yr, 2) if ten_yr > 0 else 0
+    results['yaka_savings_10yr']  = round(ten_yr_grid - coo_10yr, 0)
+    results['payback_years']      = round(bom_total / annual_sav, 2) if annual_sav > 0 else 0
+
+
+def _save_sizing(sid, f):
+    """Save sizing + appliances, run calculation, store results. Returns sid."""
+    sid        = sid or str(uuid.uuid4())
+    params     = _params_from_form(f)
+    appliances = _parse_appliances_from_form(f)
+    results    = calc_sizing(params, appliances)
+
+    # Check if the BoM has been manually locked (user customised it)
+    existing     = query("SELECT bom_locked FROM solar_sizings WHERE id=%s", (sid,))
+    bom_locked   = bool(existing[0]['bom_locked']) if existing else False
+
+    if bom_locked:
+        # Keep existing BoM; derive system_cost from stored rows
+        existing_bom = query("SELECT total FROM solar_sizing_bom WHERE sizing_id=%s", (sid,))
+        bom_total    = sum(float(r['total']) for r in existing_bom)
+        bom_items    = None   # don't rebuild
+    else:
+        bom_items = build_bom(params, results)
+        bom_total = sum(item['total'] for item in bom_items)
+
+    # True system cost = BoM total (includes fixed accessories not in calc_sizing estimate)
+    _recompute_financials(results, bom_total, params)
+
+    # tariff_escalation stored as % in DB (not decimal) — convert back for storage
+    tariff_esc_pct = params["tariff_escalation"] * 100
+
+    # Upsert solar_sizings
+    execute("""
+        INSERT INTO solar_sizings (
+            id, client_name, client_phone, client_email, client_site,
+            utility_provider, utility_tariff, tariff_escalation,
+            system_voltage, battery_type, days_autonomy, dod,
+            inverter_efficiency, cable_efficiency, inverter_idle_w, peak_sun_hours, performance_ratio,
+            panel_wp, panel_voc, panel_isc, panel_cost,
+            mppt_trackers, mppt_min_v, mppt_max_v, max_oc_v,
+            max_input_current_per_tracker, max_isc_per_tracker, max_pv_power_per_tracker,
+            battery_ah, battery_voltage, battery_cost_each, battery_is_bank,
+            inverter_kw, inverter_cost, labour_transport,
+            total_daily_wh, inverter_idle_wh, peak_load_w, battery_ah_min,
+            batteries_in_series, batteries_in_parallel, total_batteries,
+            required_wp, panels_by_energy, panels_by_voltage,
+            panels_in_series, strings_total, strings_per_tracker,
+            panels_recommended, voltage_override, annual_yield_kwh,
+            system_cost, maintenance_cost_10yr, solar_cost_per_kwh,
+            yaka_savings_10yr, payback_years, inverter_flag, panel_array_flag,
+            notes, updated_at
+        ) VALUES (
+            %s,%s,%s,%s,%s,
+            %s,%s,%s,
+            %s,%s,%s,%s,
+            %s,%s,%s,%s,%s,
+            %s,%s,%s,%s,
+            %s,%s,%s,%s,
+            %s,%s,%s,
+            %s,%s,%s,%s,
+            %s,%s,%s,
+            %s,%s,%s,%s,
+            %s,%s,%s,
+            %s,%s,%s,
+            %s,%s,%s,
+            %s,%s,%s,
+            %s,%s,%s,
+            %s,%s,%s,%s,
+            %s, NOW()
+        )
+        ON CONFLICT (id) DO UPDATE SET
+            client_name=EXCLUDED.client_name, client_phone=EXCLUDED.client_phone,
+            client_email=EXCLUDED.client_email, client_site=EXCLUDED.client_site,
+            utility_provider=EXCLUDED.utility_provider, utility_tariff=EXCLUDED.utility_tariff,
+            tariff_escalation=EXCLUDED.tariff_escalation,
+            system_voltage=EXCLUDED.system_voltage, battery_type=EXCLUDED.battery_type,
+            days_autonomy=EXCLUDED.days_autonomy, dod=EXCLUDED.dod,
+            inverter_efficiency=EXCLUDED.inverter_efficiency, cable_efficiency=EXCLUDED.cable_efficiency,
+            inverter_idle_w=EXCLUDED.inverter_idle_w,
+            peak_sun_hours=EXCLUDED.peak_sun_hours, performance_ratio=EXCLUDED.performance_ratio,
+            panel_wp=EXCLUDED.panel_wp, panel_voc=EXCLUDED.panel_voc,
+            panel_isc=EXCLUDED.panel_isc, panel_cost=EXCLUDED.panel_cost,
+            mppt_trackers=EXCLUDED.mppt_trackers,
+            mppt_min_v=EXCLUDED.mppt_min_v, mppt_max_v=EXCLUDED.mppt_max_v,
+            max_oc_v=EXCLUDED.max_oc_v,
+            max_input_current_per_tracker=EXCLUDED.max_input_current_per_tracker,
+            max_isc_per_tracker=EXCLUDED.max_isc_per_tracker,
+            max_pv_power_per_tracker=EXCLUDED.max_pv_power_per_tracker,
+            battery_ah=EXCLUDED.battery_ah, battery_voltage=EXCLUDED.battery_voltage,
+            battery_cost_each=EXCLUDED.battery_cost_each, battery_is_bank=EXCLUDED.battery_is_bank,
+            inverter_kw=EXCLUDED.inverter_kw, inverter_cost=EXCLUDED.inverter_cost,
+            labour_transport=EXCLUDED.labour_transport,
+            total_daily_wh=EXCLUDED.total_daily_wh, inverter_idle_wh=EXCLUDED.inverter_idle_wh,
+            peak_load_w=EXCLUDED.peak_load_w, battery_ah_min=EXCLUDED.battery_ah_min,
+            batteries_in_series=EXCLUDED.batteries_in_series,
+            batteries_in_parallel=EXCLUDED.batteries_in_parallel,
+            total_batteries=EXCLUDED.total_batteries,
+            required_wp=EXCLUDED.required_wp, panels_by_energy=EXCLUDED.panels_by_energy,
+            panels_by_voltage=EXCLUDED.panels_by_voltage,
+            panels_in_series=EXCLUDED.panels_in_series,
+            strings_total=EXCLUDED.strings_total, strings_per_tracker=EXCLUDED.strings_per_tracker,
+            panels_recommended=EXCLUDED.panels_recommended,
+            voltage_override=EXCLUDED.voltage_override,
+            annual_yield_kwh=EXCLUDED.annual_yield_kwh,
+            system_cost=EXCLUDED.system_cost, maintenance_cost_10yr=EXCLUDED.maintenance_cost_10yr,
+            solar_cost_per_kwh=EXCLUDED.solar_cost_per_kwh,
+            yaka_savings_10yr=EXCLUDED.yaka_savings_10yr, payback_years=EXCLUDED.payback_years,
+            inverter_flag=EXCLUDED.inverter_flag, panel_array_flag=EXCLUDED.panel_array_flag,
+            notes=EXCLUDED.notes, updated_at=NOW()
+    """, (
+        sid,
+        f.get("client_name"), f.get("client_phone",""), f.get("client_email",""), f.get("client_site",""),
+        params["utility_provider"], params["utility_tariff"], tariff_esc_pct,
+        params["system_voltage"], params["battery_type"], params["days_autonomy"], params["dod"],
+        params["inverter_efficiency"], params["cable_efficiency"], params["inverter_idle_w"],
+        params["peak_sun_hours"], params["performance_ratio"],
+        params["panel_wp"], params["panel_voc"], params["panel_isc"], params["panel_cost"],
+        params["mppt_trackers"], params["mppt_min_v"], params["mppt_max_v"], params["max_oc_v"],
+        params["max_input_current_per_tracker"], params["max_isc_per_tracker"], params["max_pv_power_per_tracker"],
+        params["battery_ah"], params["battery_voltage"], params["battery_cost_each"], params["battery_is_bank"],
+        params["inverter_kw"], params["inverter_cost"], params["labour_transport"],
+        results["total_daily_wh"], results["inverter_idle_wh"], results["peak_load_w"], results["battery_ah_min"],
+        results["batteries_in_series"], results["batteries_in_parallel"], results["total_batteries"],
+        results["required_wp"], results["panels_by_energy"], results["panels_by_voltage"],
+        results["panels_in_series"], results["strings_total"], results["strings_per_tracker"],
+        results["panels_recommended"], results["voltage_override"], results["annual_yield_kwh"],
+        results["system_cost"], results["maintenance_cost_10yr"], results["solar_cost_per_kwh"],
+        results["yaka_savings_10yr"], results["payback_years"], results["inverter_flag"], results["panel_array_flag"],
+        f.get("notes",""),
+    ))
+
+    # Replace appliances
+    execute("DELETE FROM solar_sizing_appliances WHERE sizing_id=%s", (sid,))
+    for i, a in enumerate(results["appliances"], 1):
+        execute("""
+            INSERT INTO solar_sizing_appliances
+                (sizing_id, line_no, name, load_type, power_w, annual_kwh, peak_w,
+                 power_factor, quantity, hours_per_day, included, daily_wh)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+        """, (sid, i, a["name"], a.get("load_type","standard"),
+              a["power_w"], a.get("annual_kwh",0), a.get("peak_w",0),
+              a["power_factor"], a["quantity"], a["hours_per_day"],
+              a["included"], a.get("daily_wh", 0)))
+
+    # Replace BoM only if not locked (user customisations are preserved)
+    if not bom_locked:
+        execute("DELETE FROM solar_sizing_bom WHERE sizing_id=%s", (sid,))
+        for i, item in enumerate(bom_items, 1):
+            execute("""
+                INSERT INTO solar_sizing_bom (sizing_id, line_no, description, uom, qty, unit_price, total)
+                VALUES (%s,%s,%s,%s,%s,%s,%s)
+            """, (sid, i, item["description"], item["uom"], item["qty"], item["unit_price"], item["total"]))
+
+    return sid
+
+
+@app.route("/solar")
+@login_required
+def solar_list():
+    rows = query("""
+        SELECT s.*, q.quotation_no
+        FROM solar_sizings s
+        LEFT JOIN quotations q ON q.id = s.quotation_id
+        ORDER BY s.created_at DESC
+    """)
+    return render_template("solar/list.html", sizings=rows)
+
+
+def _solar_catalog():
+    """Fetch catalog items for solar sizing form dropdowns.
+    Returns dict of lists keyed by category, with spec_data parsed."""
+    rows = query(
+        "SELECT id, category, name, spec, sell_price, spec_data "
+        "FROM catalog_items WHERE category IN ('Solar Panel','Inverter','Battery','Charge Controller') "
+        "ORDER BY category, name"
+    )
+    result = {"Solar Panel": [], "Inverter": [], "Battery": [], "Charge Controller": []}
+    for r in rows:
+        sd = r["spec_data"]
+        if isinstance(sd, str):
+            try:
+                sd = json.loads(sd)
+            except Exception:
+                sd = {}
+        result.setdefault(r["category"], []).append({
+            "id":        r["id"],
+            "name":      r["name"],
+            "spec":      r["spec"],
+            "price":     r["sell_price"],
+            "spec_data": sd or {},
+        })
+    return result
+
+
+@app.route("/solar/new", methods=["GET", "POST"])
+@login_required
+def solar_new():
+    if request.method == "POST":
+        sid = _save_sizing(None, request.form)
+        flash("Sizing calculated and saved.", "success")
+        return redirect(url_for("solar_view", sid=sid))
+    return render_template("solar/form.html", sizing=None,
+                           appliances=None, default_appliances=_DEFAULT_APPLIANCES,
+                           catalog=_solar_catalog())
+
+
+@app.route("/solar/<sid>")
+@login_required
+def solar_view(sid):
+    s = query_one("SELECT * FROM solar_sizings WHERE id=%s", (sid,))
+    if not s:
+        abort(404)
+    appliances  = query("SELECT * FROM solar_sizing_appliances WHERE sizing_id=%s ORDER BY line_no", (sid,))
+    bom         = query("SELECT * FROM solar_sizing_bom WHERE sizing_id=%s ORDER BY line_no", (sid,))
+    bom_total   = sum(item["total"] for item in bom)
+    r           = dict(s)   # results are stored on the sizing row
+    quotation_no = None
+    if s["quotation_id"]:
+        qt = query_one("SELECT quotation_no FROM quotations WHERE id=%s", (s["quotation_id"],))
+        quotation_no = qt["quotation_no"] if qt else None
+    return render_template("solar/view.html", s=s, r=r, appliances=appliances,
+                           bom=bom, bom_total=bom_total, quotation_no=quotation_no)
+
+
+@app.route("/solar/<sid>/edit", methods=["GET", "POST"])
+@login_required
+def solar_edit(sid):
+    s = query_one("SELECT * FROM solar_sizings WHERE id=%s", (sid,))
+    if not s:
+        abort(404)
+    if request.method == "POST":
+        _save_sizing(sid, request.form)
+        flash("Sizing recalculated and saved.", "success")
+        return redirect(url_for("solar_view", sid=sid))
+    appliances = query("SELECT * FROM solar_sizing_appliances WHERE sizing_id=%s ORDER BY line_no", (sid,))
+    return render_template("solar/form.html", sizing=s, appliances=appliances,
+                           default_appliances=_DEFAULT_APPLIANCES, catalog=_solar_catalog())
+
+
+@app.route("/solar/<sid>/to-quotation", methods=["POST"])
+@login_required
+def solar_to_quotation(sid):
+    s = query_one("SELECT * FROM solar_sizings WHERE id=%s", (sid,))
+    if not s:
+        abort(404)
+    bom = query("SELECT * FROM solar_sizing_bom WHERE sizing_id=%s ORDER BY line_no", (sid,))
+
+    qid = str(uuid.uuid4())
+    qno = next_quotation_number()
+    execute("""
+        INSERT INTO quotations (id, quotation_no, date, title, customer_name, customer_phone,
+            customer_email, customer_address, delivery, validity, warranty, payment_terms,
+            status, total_amount, notes)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+    """, (
+        qid, qno, date.today().isoformat(),
+        f"Solar Installation — {s['client_name']}",
+        s["client_name"], s["client_phone"] or "",
+        s["client_email"] or "", s["client_site"] or "",
+        "1-2 weeks after 70% material cost payment",
+        "30 days", "12 months commencing on delivery date",
+        "Cash / MM / EFT", "Pending",
+        s["system_cost"] or 0,
+        f"Generated from Solar Sizing. {s['utility_provider']} tariff: UGX {s['utility_tariff']:,.0f}/kWh. "
+        f"Payback: {s['payback_years']:.1f} years.",
+    ))
+    for item in bom:
+        execute("""
+            INSERT INTO quotation_items (quotation_id, line_no, description, uom, qty, unit_price, total)
+            VALUES (%s,%s,%s,%s,%s,%s,%s)
+        """, (qid, item["line_no"], item["description"], item["uom"],
+              item["qty"], item["unit_price"], item["total"]))
+
+    # Link sizing → quotation
+    execute("UPDATE solar_sizings SET quotation_id=%s, status='Sent', updated_at=NOW() WHERE id=%s",
+            (qid, sid))
+
+    flash(f"Quotation {qno} created from sizing.", "success")
+    return redirect(url_for("quotations_view", qid=qid))
+
+
+@app.route("/solar/<sid>/pptx")
+@login_required
+def solar_pptx(sid):
+    s = query_one("SELECT * FROM solar_sizings WHERE id=%s", (sid,))
+    if not s:
+        abort(404)
+    appliances = query("SELECT * FROM solar_sizing_appliances WHERE sizing_id=%s ORDER BY line_no", (sid,))
+    bom        = query("SELECT * FROM solar_sizing_bom WHERE sizing_id=%s ORDER BY line_no", (sid,))
+    results    = dict(s)
+    pptx_bytes = build_proposal(dict(s), results, [dict(a) for a in appliances], [dict(b) for b in bom])
+    safe_name  = s["client_name"].replace(" ", "_").replace("/", "-")
+    return send_file(
+        io.BytesIO(pptx_bytes),
+        download_name=f"Solar_Proposal_{safe_name}.pptx",
+        as_attachment=True,
+        mimetype="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    )
+
+
+@app.route("/solar/<sid>/delete", methods=["POST"])
+@login_required
+def solar_delete(sid):
+    execute("DELETE FROM solar_sizings WHERE id=%s", (sid,))
+    flash("Sizing deleted.", "info")
+    return redirect(url_for("solar_list"))
+
+
+@app.route("/solar/<sid>/bom", methods=["GET", "POST"])
+@login_required
+def solar_bom_edit(sid):
+    s = query("SELECT * FROM solar_sizings WHERE id=%s", (sid,))
+    if not s:
+        flash("Sizing not found.", "danger")
+        return redirect(url_for("solar_list"))
+    s = s[0]
+
+    if request.method == "POST":
+        action = request.form.get("action", "save")
+
+        if action == "regenerate":
+            # Rebuild BoM from stored sizing values, unlock
+            stored_params = {
+                "system_voltage":                s["system_voltage"],
+                "panel_wp":                      s["panel_wp"],
+                "panel_isc":                     s["panel_isc"] or 0,
+                "panel_cost":                    s["panel_cost"] or 0,
+                "mppt_trackers":                 s["mppt_trackers"] or 1,
+                "battery_ah":                    s["battery_ah"],
+                "battery_voltage":               s["battery_voltage"],
+                "battery_type":                  s["battery_type"],
+                "battery_cost_each":             s["battery_cost_each"] or 0,
+                "inverter_kw":                   s["inverter_kw"],
+                "inverter_cost":                 s["inverter_cost"] or 0,
+                "labour_transport":              s["labour_transport"] or 0,
+                "utility_tariff":                s["utility_tariff"],
+                "tariff_escalation":             (s["tariff_escalation"] or 0) / 100,
+                "maintenance_cost_10yr":         s["maintenance_cost_10yr"] or 0,
+            }
+            stored_results = {
+                "panels_recommended":  s["panels_recommended"],
+                "total_batteries":     s["total_batteries"],
+                "batteries_in_parallel": s["batteries_in_parallel"],
+                "strings_per_tracker": s["strings_per_tracker"] or 1,
+                "annual_yield_kwh":    s["annual_yield_kwh"],
+                "maintenance_cost_10yr": s["maintenance_cost_10yr"] or 0,
+            }
+            bom_items = build_bom(stored_params, stored_results)
+            bom_total = sum(item["total"] for item in bom_items)
+
+            execute("DELETE FROM solar_sizing_bom WHERE sizing_id=%s", (sid,))
+            for i, item in enumerate(bom_items, 1):
+                execute("""
+                    INSERT INTO solar_sizing_bom (sizing_id, line_no, description, uom, qty, unit_price, total)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s)
+                """, (sid, i, item["description"], item["uom"], item["qty"], item["unit_price"], item["total"]))
+
+            # Recompute financials and unlock
+            maint    = s["maintenance_cost_10yr"] or 0
+            coo_10yr = bom_total + maint
+            ten_yr   = (s["annual_yield_kwh"] or 0) * 10
+            util_t   = s["utility_tariff"] or 897
+            tariff_e = (s["tariff_escalation"] or 0) / 100
+            if tariff_e > 0:
+                ten_yr_grid = sum((s["annual_yield_kwh"] or 0) * util_t * ((1+tariff_e)**yr) for yr in range(10))
+            else:
+                ten_yr_grid = ten_yr * util_t
+            annual_sav = (s["annual_yield_kwh"] or 0) * util_t
+            execute("""
+                UPDATE solar_sizings
+                SET bom_locked=FALSE,
+                    system_cost=%s, solar_cost_per_kwh=%s,
+                    yaka_savings_10yr=%s, payback_years=%s,
+                    updated_at=NOW()
+                WHERE id=%s
+            """, (
+                round(bom_total, 0),
+                round(coo_10yr / ten_yr, 2) if ten_yr > 0 else 0,
+                round(ten_yr_grid - coo_10yr, 0),
+                round(bom_total / annual_sav, 2) if annual_sav > 0 else 0,
+                sid,
+            ))
+            flash("BoM regenerated from sizing.", "success")
+            return redirect(url_for("solar_bom_edit", sid=sid))
+
+        else:  # save custom BoM
+            descs  = request.form.getlist("description[]")
+            uoms   = request.form.getlist("uom[]")
+            qtys   = request.form.getlist("qty[]")
+            prices = request.form.getlist("unit_price[]")
+
+            execute("DELETE FROM solar_sizing_bom WHERE sizing_id=%s", (sid,))
+            bom_total = 0.0
+            line = 0
+            for desc, uom, qty_s, price_s in zip(descs, uoms, qtys, prices):
+                if not desc.strip():
+                    continue
+                line += 1
+                qty   = float(qty_s or 0)
+                price = float(price_s or 0)
+                total = round(qty * price, 0)
+                bom_total += total
+                execute("""
+                    INSERT INTO solar_sizing_bom (sizing_id, line_no, description, uom, qty, unit_price, total)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s)
+                """, (sid, line, desc.strip(), uom, qty, round(price, 0), total))
+
+            # Recompute financials from new BoM total and lock
+            maint    = s["maintenance_cost_10yr"] or 0
+            coo_10yr = bom_total + maint
+            ten_yr   = (s["annual_yield_kwh"] or 0) * 10
+            util_t   = s["utility_tariff"] or 897
+            tariff_e = (s["tariff_escalation"] or 0) / 100
+            if tariff_e > 0:
+                ten_yr_grid = sum((s["annual_yield_kwh"] or 0) * util_t * ((1+tariff_e)**yr) for yr in range(10))
+            else:
+                ten_yr_grid = ten_yr * util_t
+            annual_sav = (s["annual_yield_kwh"] or 0) * util_t
+            execute("""
+                UPDATE solar_sizings
+                SET bom_locked=TRUE,
+                    system_cost=%s, solar_cost_per_kwh=%s,
+                    yaka_savings_10yr=%s, payback_years=%s,
+                    updated_at=NOW()
+                WHERE id=%s
+            """, (
+                round(bom_total, 0),
+                round(coo_10yr / ten_yr, 2) if ten_yr > 0 else 0,
+                round(ten_yr_grid - coo_10yr, 0),
+                round(bom_total / annual_sav, 2) if annual_sav > 0 else 0,
+                sid,
+            ))
+            flash("BoM saved and locked.", "success")
+            return redirect(url_for("solar_view", sid=sid))
+
+    bom = query("SELECT * FROM solar_sizing_bom WHERE sizing_id=%s ORDER BY line_no", (sid,))
+    return render_template("solar/bom_edit.html", s=s, bom=bom)
 
 
 # ── Run ────────────────────────────────────────────────────────────────────────

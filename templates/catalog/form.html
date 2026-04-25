@@ -5,22 +5,26 @@
   &rsaquo; {% if item %}Edit{% else %}New{% endif %}
 {% endblock %}
 
+{% set sd = item.spec_data if item and item.spec_data else {} %}
+
 {% block content %}
 <form method="post">
 <div class="row g-4 justify-content-center">
   <div class="col-lg-6">
-    <div class="card">
+
+    {# ── Main Details ── #}
+    <div class="card mb-3">
       <div class="card-header"><span class="section-header mb-0">Item Details</span></div>
       <div class="card-body">
         <div class="row g-2">
           <div class="col-5">
             <label class="form-label">Item ID</label>
             <input type="text" name="id" class="form-control form-control-sm font-monospace"
-                   value="{{ item.id if item else '' }}" {% if item %}readonly{% endif %} placeholder="e.g. INV-001">
+                   value="{{ item.id if item else '' }}" {% if item %}readonly{% endif %} placeholder="e.g. INV-007">
           </div>
           <div class="col-7">
             <label class="form-label">Category</label>
-            <select name="category" class="form-select form-select-sm">
+            <select name="category" id="category" class="form-select form-select-sm" onchange="showSpecs(this.value)">
               {% for c in categories %}
               <option value="{{ c }}" {% if item and item.category==c %}selected{% endif %}>{{ c }}</option>
               {% endfor %}
@@ -55,9 +59,16 @@
                    value="{{ item.sell_price if item else 0 }}">
           </div>
           <div class="col-8">
-            <label class="form-label">Supplier ID</label>
-            <input type="text" name="supplier_id" class="form-control form-control-sm font-monospace"
-                   value="{{ item.supplier_id if item else '' }}" placeholder="SUP-...">
+            <label class="form-label">Supplier</label>
+            <select name="supplier_id" class="form-select form-select-sm">
+              <option value="">— no supplier —</option>
+              {% for sup in suppliers %}
+              <option value="{{ sup.id }}"
+                {% if item and item.supplier_id == sup.id %}selected{% endif %}>
+                {{ sup.name }}
+              </option>
+              {% endfor %}
+            </select>
           </div>
           <div class="col-12">
             <label class="form-label">Notes</label>
@@ -66,11 +77,216 @@
         </div>
       </div>
     </div>
-    <div class="d-flex gap-2 mt-3">
+
+    {# ── Solar Panel Specs ── #}
+    <div id="specs-Solar Panel" class="card mb-3 spec-section" style="display:none">
+      <div class="card-header"><span class="section-header mb-0">Panel Electrical Specs</span></div>
+      <div class="card-body">
+        <div class="row g-2">
+          <div class="col-4">
+            <label class="form-label">Power (Wp)</label>
+            <input type="number" step="0.01" name="spec_wp" class="form-control form-control-sm"
+                   value="{{ sd.get('wp','') }}">
+          </div>
+          <div class="col-4">
+            <label class="form-label">Voc (V)</label>
+            <input type="number" step="0.01" name="spec_voc" class="form-control form-control-sm"
+                   value="{{ sd.get('voc','') }}" placeholder="e.g. 40.5">
+          </div>
+          <div class="col-4">
+            <label class="form-label">Vmpp (V)</label>
+            <input type="number" step="0.01" name="spec_vmpp" class="form-control form-control-sm"
+                   value="{{ sd.get('vmpp','') }}" placeholder="e.g. 33.2">
+          </div>
+          <div class="col-4">
+            <label class="form-label">Isc (A)</label>
+            <input type="number" step="0.01" name="spec_isc" class="form-control form-control-sm"
+                   value="{{ sd.get('isc','') }}" placeholder="e.g. 14.2">
+          </div>
+          <div class="col-4">
+            <label class="form-label">Impp (A)</label>
+            <input type="number" step="0.01" name="spec_impp" class="form-control form-control-sm"
+                   value="{{ sd.get('impp','') }}" placeholder="e.g. 13.5">
+          </div>
+        </div>
+        <div class="text-muted small mt-2">STC values from panel datasheet.</div>
+      </div>
+    </div>
+
+    {# ── Inverter Specs ── #}
+    <div id="specs-Inverter" class="card mb-3 spec-section" style="display:none">
+      <div class="card-header"><span class="section-header mb-0">Inverter Electrical Specs</span></div>
+      <div class="card-body">
+        <div class="row g-2">
+          <div class="col-6">
+            <label class="form-label">Controller Type</label>
+            <select name="spec_controller_type" class="form-select form-select-sm">
+              {% for ct in ['MPPT','PWM','None'] %}
+              <option value="{{ ct }}" {% if sd.get('controller_type')==ct %}selected{% endif %}>{{ ct }}{% if ct=='None' %} (external controller required){% endif %}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-3">
+            <label class="form-label">Battery Bus (V)</label>
+            <input type="number" name="spec_battery_voltage" class="form-control form-control-sm"
+                   value="{{ sd.get('battery_voltage','') }}" placeholder="12 / 24 / 48">
+          </div>
+          <div class="col-3">
+            <label class="form-label">Inverter kW</label>
+            <input type="number" step="0.1" name="spec_inverter_kw" class="form-control form-control-sm"
+                   value="{{ sd.get('inverter_kw','') }}" placeholder="e.g. 3.5">
+          </div>
+          <div class="col-4">
+            <label class="form-label">MPPT Vmin (V)</label>
+            <input type="number" step="0.1" name="spec_mppt_min_v" class="form-control form-control-sm"
+                   value="{{ sd.get('mppt_min_v','') }}" placeholder="e.g. 30">
+          </div>
+          <div class="col-4">
+            <label class="form-label">MPPT Vmax (V)</label>
+            <input type="number" step="0.1" name="spec_mppt_max_v" class="form-control form-control-sm"
+                   value="{{ sd.get('mppt_max_v','') }}" placeholder="e.g. 145">
+          </div>
+          <div class="col-4">
+            <label class="form-label">Max OC Voltage (V)</label>
+            <input type="number" step="0.1" name="spec_max_oc_v" class="form-control form-control-sm"
+                   value="{{ sd.get('max_oc_v','') }}" placeholder="e.g. 500">
+          </div>
+          <div class="col-3">
+            <label class="form-label">MPPT Trackers</label>
+            <input type="number" min="1" name="spec_mppt_trackers" class="form-control form-control-sm"
+                   value="{{ sd.get('mppt_trackers', 1) }}" placeholder="1">
+          </div>
+          <div class="col-3">
+            <label class="form-label">Max Charge (A)</label>
+            <input type="number" step="0.1" name="spec_max_charge_a" class="form-control form-control-sm"
+                   value="{{ sd.get('max_charge_a','') }}" placeholder="e.g. 80">
+          </div>
+          <div class="col-6">
+            <label class="form-label">Max PV Power / Tracker (W)</label>
+            <input type="number" name="spec_max_pv_power_per_tracker" class="form-control form-control-sm"
+                   value="{{ sd.get('max_pv_power_per_tracker', sd.get('max_pv_power_w','')) }}" placeholder="e.g. 4500">
+            <div class="form-text">Total = this × trackers</div>
+          </div>
+          <div class="col-6">
+            <label class="form-label">Max Input Current / Tracker (A)</label>
+            <input type="number" step="0.1" name="spec_max_input_current_per_tracker" class="form-control form-control-sm"
+                   value="{{ sd.get('max_input_current_per_tracker','') }}" placeholder="e.g. 18">
+            <div class="form-text">Determines max strings per tracker</div>
+          </div>
+          <div class="col-6">
+            <label class="form-label">Max Isc / Tracker (A)</label>
+            <input type="number" step="0.1" name="spec_max_isc_per_tracker" class="form-control form-control-sm"
+                   value="{{ sd.get('max_isc_per_tracker','') }}" placeholder="e.g. 22">
+            <div class="form-text">Hard safety limit — short-circuit current</div>
+          </div>
+        </div>
+        <div class="text-muted small mt-2">MPPT fields only apply when Controller Type = MPPT.</div>
+      </div>
+    </div>
+
+    {# ── Charge Controller Specs ── #}
+    <div id="specs-Charge Controller" class="card mb-3 spec-section" style="display:none">
+      <div class="card-header"><span class="section-header mb-0">Charge Controller Specs</span></div>
+      <div class="card-body">
+        <div class="row g-2">
+          <div class="col-6">
+            <label class="form-label">Controller Type</label>
+            <select name="spec_controller_type" class="form-select form-select-sm">
+              {% for ct in ['MPPT','PWM'] %}
+              <option value="{{ ct }}" {% if sd.get('controller_type')==ct %}selected{% endif %}>{{ ct }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-3">
+            <label class="form-label">Battery Bus (V)</label>
+            <input type="number" name="spec_battery_voltage" class="form-control form-control-sm"
+                   value="{{ sd.get('battery_voltage','') }}" placeholder="12 / 24 / 48">
+          </div>
+          <div class="col-3">
+            <label class="form-label">Max Charge (A)</label>
+            <input type="number" step="0.1" name="spec_max_charge_a" class="form-control form-control-sm"
+                   value="{{ sd.get('max_charge_a','') }}" placeholder="e.g. 40">
+          </div>
+          <div class="col-4">
+            <label class="form-label">MPPT Vmin (V)</label>
+            <input type="number" step="0.1" name="spec_mppt_min_v" class="form-control form-control-sm"
+                   value="{{ sd.get('mppt_min_v','') }}">
+          </div>
+          <div class="col-4">
+            <label class="form-label">MPPT Vmax (V)</label>
+            <input type="number" step="0.1" name="spec_mppt_max_v" class="form-control form-control-sm"
+                   value="{{ sd.get('mppt_max_v','') }}">
+          </div>
+          <div class="col-4">
+            <label class="form-label">Max OC Voltage (V)</label>
+            <input type="number" step="0.1" name="spec_max_oc_v" class="form-control form-control-sm"
+                   value="{{ sd.get('max_oc_v','') }}">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {# ── Battery Specs ── #}
+    <div id="specs-Battery" class="card mb-3 spec-section" style="display:none">
+      <div class="card-header"><span class="section-header mb-0">Battery Electrical Specs</span></div>
+      <div class="card-body">
+        <div class="row g-2">
+          <div class="col-4">
+            <label class="form-label">Capacity (Ah)</label>
+            <input type="number" step="0.1" name="spec_ah" class="form-control form-control-sm"
+                   value="{{ sd.get('ah','') }}" placeholder="e.g. 200">
+          </div>
+          <div class="col-4">
+            <label class="form-label">Voltage (V)</label>
+            <input type="number" step="0.1" name="spec_voltage" class="form-control form-control-sm"
+                   value="{{ sd.get('voltage','') }}" placeholder="12 / 24 / 48">
+          </div>
+          <div class="col-4">
+            <label class="form-label">Rated DOD</label>
+            <input type="number" step="0.05" min="0" max="1" name="spec_dod_rated" class="form-control form-control-sm"
+                   value="{{ sd.get('dod_rated', 0.8) }}" placeholder="0.8">
+          </div>
+          <div class="col-12">
+            <label class="form-label">Chemistry</label>
+            <select name="spec_chemistry" class="form-select form-select-sm">
+              {% set chems = ['LiFePO4','Lead Acid','Tubular Gel','AGM','Flooded','Other'] %}
+              {% for ch in chems %}
+              <option value="{{ ch }}" {% if sd.get('chemistry')==ch %}selected{% endif %}>{{ ch }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-12">
+            <div class="form-check mt-1">
+              <input type="hidden" name="spec_is_complete_bank" value="0">
+              <input type="checkbox" name="spec_is_complete_bank" value="1"
+                     class="form-check-input" id="spec_is_complete_bank"
+                     {% if sd.get('is_complete_bank') %}checked{% endif %}>
+              <label class="form-check-label" for="spec_is_complete_bank">
+                Complete voltage bank — do not put in series
+                <span class="text-muted small">(e.g. 48V LiFePO4 pack, or cells already assembled to target voltage)</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="d-flex gap-2 mt-1">
       <button type="submit" class="btn btn-success"><i class="bi bi-check2-circle"></i> Save</button>
       <a href="{{ url_for('catalog_list') }}" class="btn btn-outline-secondary">Cancel</a>
     </div>
+
   </div>
 </div>
 </form>
+
+<script>
+function showSpecs(cat) {
+  document.querySelectorAll('.spec-section').forEach(el => el.style.display = 'none');
+  const target = document.getElementById('specs-' + cat);
+  if (target) target.style.display = '';
+}
+// Run on page load with current category
+showSpecs(document.getElementById('category').value);
+</script>
 {% endblock %}

@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Solar Sizing{% endblock %}
+{% block breadcrumb %}Solar Sizing{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h5 class="mb-0">Solar Sizing</h5>
+  <a href="{{ url_for('solar_new') }}" class="btn btn-primary btn-sm">
+    <i class="bi bi-plus"></i> New Sizing
+  </a>
+</div>
+
+<div class="card">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead>
+          <tr>
+            <th>Client</th>
+            <th>Site</th>
+            <th class="text-end">Daily Load</th>
+            <th class="text-end">Panels</th>
+            <th class="text-end">Batteries</th>
+            <th class="text-end">System Cost</th>
+            <th class="text-end">Payback</th>
+            <th>Status</th>
+            <th>Date</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in sizings %}
+          <tr>
+            <td>
+              <a href="{{ url_for('solar_view', sid=row.id) }}" class="text-blue text-decoration-none fw-medium">
+                {{ row.client_name }}
+              </a>
+              {% if row.client_phone %}<div class="text-muted" style="font-size:.7rem">{{ row.client_phone }}</div>{% endif %}
+            </td>
+            <td class="text-muted small">{{ row.client_site or '—' }}</td>
+            <td class="text-end small">{{ '{:,.0f}'.format(row.total_daily_wh or 0) }} Wh</td>
+            <td class="text-end small">{{ row.panels_recommended }} × {{ '{:.0f}'.format(row.panel_wp or 0) }}Wp</td>
+            <td class="text-end small">{{ row.total_batteries }} × {{ '{:.0f}'.format(row.battery_ah or 0) }}Ah</td>
+            <td class="text-end money small">{{ '{:,.0f}'.format(row.system_cost or 0) }}</td>
+            <td class="text-end small {% if row.payback_years and row.payback_years < 5 %}text-success{% endif %}">
+              {% if row.payback_years %}{{ '{:.1f}'.format(row.payback_years) }} yr{% else %}—{% endif %}
+            </td>
+            <td>
+              {% if row.status == 'Sent' %}
+                <span class="badge badge-completed">Sent</span>
+              {% elif row.status == 'Archived' %}
+                <span class="badge badge-cancelled">Archived</span>
+              {% else %}
+                <span class="badge badge-pending">Draft</span>
+              {% endif %}
+              {% if row.quotation_no %}
+                <div class="text-muted" style="font-size:.65rem">
+                  <a href="{{ url_for('quotations_view', qid=row.quotation_id) }}" class="text-muted">{{ row.quotation_no }}</a>
+                </div>
+              {% endif %}
+            </td>
+            <td class="text-muted small">{{ row.created_at.strftime('%Y-%m-%d') if row.created_at else '—' }}</td>
+            <td class="text-end">
+              <a href="{{ url_for('solar_edit', sid=row.id) }}" class="btn btn-sm btn-outline-secondary py-0 px-2">
+                <i class="bi bi-pencil"></i>
+              </a>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="10" class="text-center text-muted py-4">
+              No sizings yet. <a href="{{ url_for('solar_new') }}">Create your first sizing.</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

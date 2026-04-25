@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+{% block title %}Edit BoM — {{ s.client_name }}{% endblock %}
+{% block breadcrumb %}
+  <a href="{{ url_for('solar_list') }}" class="text-muted text-decoration-none">Solar Sizing</a>
+  &rsaquo; <a href="{{ url_for('solar_view', sid=s.id) }}" class="text-muted text-decoration-none">{{ s.client_name }}</a>
+  &rsaquo; Edit BoM
+{% endblock %}
+
+{% block content %}
+
+{% if s.bom_locked %}
+<div class="alert alert-warning py-2 small mb-3">
+  <i class="bi bi-lock-fill"></i> <strong>BoM is locked.</strong>
+  Changes to the sizing form will not overwrite this BoM.
+  <a href="#" onclick="document.getElementById('regenerate-form').submit(); return false;" class="alert-link ms-2">
+    Regenerate from sizing
+  </a>
+</div>
+{% else %}
+<div class="alert alert-info py-2 small mb-3">
+  <i class="bi bi-info-circle"></i>
+  Auto-generated BoM. Saving changes here will lock it so future sizing edits don't overwrite it.
+</div>
+{% endif %}
+
+{# Hidden regenerate form #}
+<form id="regenerate-form" method="post" style="display:none">
+  <input type="hidden" name="action" value="regenerate">
+</form>
+
+<form method="post" id="bom-form">
+<input type="hidden" name="action" value="save">
+
+<div class="card mb-3">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span class="section-header mb-0">Bill of Materials — {{ s.client_name }}</span>
+    <span class="text-muted small" id="bom-total-display"></span>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-sm mb-0" id="bom-table">
+        <thead>
+          <tr>
+            <th style="width:38%">Description</th>
+            <th style="width:8%">UoM</th>
+            <th style="width:8%" class="text-end">Qty</th>
+            <th style="width:16%" class="text-end">Unit Price (UGX)</th>
+            <th style="width:16%" class="text-end">Total (UGX)</th>
+            <th style="width:6%"></th>
+          </tr>
+        </thead>
+        <tbody id="bom-body">
+          {% for item in bom %}
+          <tr class="bom-row">
+            <td><input type="text" name="description[]" class="form-control form-control-sm" value="{{ item.description }}" required></td>
+            <td>
+              <select name="uom[]" class="form-select form-select-sm">
+                {% for u in ['pc','m','roll','lot','job','set','pair','box'] %}
+                <option value="{{ u }}" {% if item.uom == u %}selected{% endif %}>{{ u }}</option>
+                {% endfor %}
+              </select>
+            </td>
+            <td><input type="number" name="qty[]" class="form-control form-control-sm text-end bom-qty" value="{{ '{:.0f}'.format(item.qty) }}" min="0" step="0.01" oninput="recalcRow(this)"></td>
+            <td><input type="number" name="unit_price[]" class="form-control form-control-sm text-end bom-price" value="{{ '{:.0f}'.format(item.unit_price) }}" min="0" oninput="recalcRow(this)"></td>
+            <td class="text-end align-middle bom-row-total fw-semibold small">{{ '{:,.0f}'.format(item.total) }}</td>
+            <td class="text-center align-middle">
+              <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="removeRow(this)" title="Remove row">
+                <i class="bi bi-x"></i>
+              </button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="6" class="px-2 py-2">
+              <button type="button" class="btn btn-sm btn-outline-secondary" onclick="addRow()">
+                <i class="bi bi-plus-circle"></i> Add line
+              </button>
+            </td>
+          </tr>
+          <tr class="fw-bold border-top">
+            <td colspan="4" class="text-end">Total</td>
+            <td class="text-end text-blue" id="bom-grand-total">—</td>
+            <td></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="d-flex gap-2 mb-4">
+  <button type="submit" class="btn btn-success">
+    <i class="bi bi-lock-fill"></i> Save &amp; Lock BoM
+  </button>
+  <a href="{{ url_for('solar_view', sid=s.id) }}" class="btn btn-outline-secondary">Cancel</a>
+  <div class="ms-auto">
+    <button type="button" class="btn btn-outline-warning btn-sm"
+            onclick="if(confirm('Regenerate will discard all manual edits and rebuild from sizing. Continue?')) document.getElementById('regenerate-form').submit()">
+      <i class="bi bi-arrow-counterclockwise"></i> Regenerate from sizing
+    </button>
+  </div>
+</div>
+</form>
+
+<script>
+// ── Row template for "Add line" ──────────────────────────────────────────────
+function addRow() {
+  const uomOptions = ['pc','m','roll','lot','job','set','pair','box']
+    .map(u => `<option value="${u}">${u}</option>`).join('');
+
+  const tr = document.createElement('tr');
+  tr.className = 'bom-row';
+  tr.innerHTML = `
+    <td><input type="text" name="description[]" class="form-control form-control-sm" placeholder="Description" required></td>
+    <td><select name="uom[]" class="form-select form-select-sm">${uomOptions}</select></td>
+    <td><input type="number" name="qty[]" class="form-control form-control-sm text-end bom-qty" value="1" min="0" step="0.01" oninput="recalcRow(this)"></td>
+    <td><input type="number" name="unit_price[]" class="form-control form-control-sm text-end bom-price" value="0" min="0" oninput="recalcRow(this)"></td>
+    <td class="text-end align-middle bom-row-total fw-semibold small">0</td>
+    <td class="text-center align-middle">
+      <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="removeRow(this)">
+        <i class="bi bi-x"></i>
+      </button>
+    </td>`;
+  document.getElementById('bom-body').appendChild(tr);
+  tr.querySelector('input[name="description[]"]').focus();
+  recalcTotal();
+}
+
+function removeRow(btn) {
+  btn.closest('tr').remove();
+  recalcTotal();
+}
+
+function recalcRow(input) {
+  const row   = input.closest('tr');
+  const qty   = parseFloat(row.querySelector('.bom-qty').value) || 0;
+  const price = parseFloat(row.querySelector('.bom-price').value) || 0;
+  const total = qty * price;
+  row.querySelector('.bom-row-total').textContent = total.toLocaleString('en-UG', {maximumFractionDigits: 0});
+  recalcTotal();
+}
+
+function recalcTotal() {
+  let grand = 0;
+  document.querySelectorAll('.bom-row').forEach(row => {
+    const qty   = parseFloat(row.querySelector('.bom-qty').value) || 0;
+    const price = parseFloat(row.querySelector('.bom-price').value) || 0;
+    grand += qty * price;
+  });
+  const fmt = 'UGX ' + grand.toLocaleString('en-UG', {maximumFractionDigits: 0});
+  document.getElementById('bom-grand-total').textContent = fmt;
+  document.getElementById('bom-total-display').textContent = 'Total: ' + fmt;
+}
+
+// Run on load
+recalcTotal();
+</script>
+{% endblock %}
