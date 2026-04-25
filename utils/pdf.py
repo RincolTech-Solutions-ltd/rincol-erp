@@ -402,7 +402,8 @@ def build_receipt_pdf(r: dict, sig_issued_bytes=None, sig_received_bytes=None) -
 
     amount_fig  = float(r.get("amount_fig", 0))
     amount_paid = float(r.get("amount_paid", 0))
-    balance     = amount_fig - amount_paid
+    balance     = float(r.get("balance") if r.get("balance") is not None else (amount_fig - amount_paid))
+    prev_paid   = amount_fig - amount_paid - balance  # everything paid before this receipt
 
     info_rows = [
         [Paragraph("Received with thanks from:", lbl_s), Paragraph(cust_str, val_s)],
@@ -427,23 +428,28 @@ def build_receipt_pdf(r: dict, sig_issued_bytes=None, sig_received_bytes=None) -
     elems.append(pay_hdr)
 
     pay_rows = [
-        [Paragraph("Amount in Figures (UGX)", lbl_s), Paragraph(f"{amount_fig:,.0f}",  cell_r)],
-        [Paragraph("Amount Paid (UGX)",        lbl_s), Paragraph(f"{amount_paid:,.0f}", cell_r)],
-        [Paragraph("Balance (UGX)",             lbl_s), Paragraph(f"{balance:,.0f}",    cell_b)],
+        [Paragraph("Amount in Figures (UGX)", lbl_s), Paragraph(f"{amount_fig:,.0f}", cell_r)],
     ]
-    cheque = (r.get("cheque_no") or "").strip()
-    if cheque:
-        pm = (r.get("payment_method") or "").strip()
-        ref_label = "Transaction ID" if pm == "Mobile Money" else "Reference No." if pm == "Bank Transfer" else "Cheque No."
-        pay_rows.append([Paragraph(ref_label, lbl_s), Paragraph(cheque, val_s)])
+    if prev_paid > 0:
+        pay_rows.append([Paragraph("Previously Paid (UGX)", lbl_s), Paragraph(f"{prev_paid:,.0f}", cell_r)])
+    pay_rows.append([Paragraph("This Payment (UGX)", lbl_s), Paragraph(f"{amount_paid:,.0f}", cell_r)])
+    balance_row = len(pay_rows)
+    pay_rows.append([Paragraph("Outstanding Balance (UGX)", lbl_s), Paragraph(f"{balance:,.0f}", cell_b)])
+
     pm_val = (r.get("payment_method") or "Cash").strip()
     pay_rows.append([Paragraph("Payment Method", lbl_s), Paragraph(pm_val, val_s)])
+
+    cheque = (r.get("cheque_no") or "").strip()
+    if cheque:
+        pm = pm_val
+        ref_label = "Transaction ID" if pm == "Mobile Money" else "Reference No." if pm == "Bank Transfer" else "Cheque No."
+        pay_rows.append([Paragraph(ref_label, lbl_s), Paragraph(cheque, val_s)])
 
     pay_tbl = Table(pay_rows, colWidths=[W * 0.68, W * 0.32])
     pay_tbl.setStyle(TableStyle([
         border, inner, pad,
         ("ROWBACKGROUNDS", (0, 0), (-1, -1), [WHITE, LGRAY]),
-        ("BACKGROUND",     (0, 2), (-1, 2),  LGREEN),
+        ("BACKGROUND",     (0, balance_row), (-1, balance_row), LGREEN),
         ("VALIGN",         (0, 0), (-1, -1), "MIDDLE"),
     ]))
     elems.append(pay_tbl)
