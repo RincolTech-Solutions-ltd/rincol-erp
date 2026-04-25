@@ -195,6 +195,51 @@ tr.dragging { opacity: 0.35; }
 }
 .catalog-picker:focus { border-color: var(--accent-blue); outline: none; color: #e2e8f0; }
 
+/* ── Mobile responsive ───────────────────────────────────────────────────── */
+@media (max-width: 767px) {
+  /* Sidebar slides in as overlay */
+  #sidebar {
+    position: fixed;
+    left: 0; top: 0;
+    height: 100vh;
+    transform: translateX(-100%);
+    transition: transform .25s ease;
+    z-index: 200;
+    width: 240px;
+  }
+  #sidebar.show { transform: translateX(0); }
+
+  /* Backdrop behind open sidebar */
+  #sidebar-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.55);
+    z-index: 199;
+  }
+  #sidebar-backdrop.show { display: block; }
+
+  /* Main content takes full width */
+  .main-content { width: 100%; }
+
+  /* Topbar: show hamburger, tighten padding */
+  .topbar { padding: 0 1rem !important; }
+  #sidebarToggle { display: flex !important; }
+
+  /* Stat cards: 2 columns */
+  .stat-card { padding: .9rem; }
+  .stat-card .stat-value { font-size: 1.3rem; }
+
+  /* Content padding */
+  .content-body { padding: 1rem !important; }
+
+  /* Tables scroll horizontally */
+  .table-responsive-resizable { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+  /* Quotation line items — reduce font size */
+  #line-items-table th, #line-items-table td { font-size: .75rem; padding: 4px 5px; }
+}
+
 /* ── Misc ────────────────────────────────────────────────────────────────── */
 .text-blue  { color: var(--accent-blue) !important; }
 .text-green { color: var(--accent-green) !important; }

@@ -19,6 +19,7 @@
 <body>
 
 {# ── Sidebar ───────────────────────────────────────────────────────────────── #}
+<div id="sidebar-backdrop"></div>
 <div class="d-flex">
   <nav id="sidebar" class="sidebar d-flex flex-column p-3">
     <div class="sidebar-brand mb-4 d-flex align-items-center gap-2">
@@ -152,6 +153,19 @@
 </script>
 
 <script>
+// Sidebar toggle for mobile
+(function () {
+  const sidebar   = document.getElementById('sidebar');
+  const backdrop  = document.getElementById('sidebar-backdrop');
+  const toggleBtn = document.getElementById('sidebarToggle');
+  function openSidebar()  { sidebar.classList.add('show'); backdrop.classList.add('show'); }
+  function closeSidebar() { sidebar.classList.remove('show'); backdrop.classList.remove('show'); }
+  if (toggleBtn) toggleBtn.addEventListener('click', openSidebar);
+  if (backdrop)  backdrop.addEventListener('click', closeSidebar);
+  // Close on nav link tap (mobile)
+  sidebar.querySelectorAll('.nav-link').forEach(a => a.addEventListener('click', closeSidebar));
+})();
+
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/static/js/sw.js')
