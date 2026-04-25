@@ -15,9 +15,10 @@
     <a href="{{ url_for('receipts_edit', rid=r.id) }}" class="btn btn-sm btn-outline-secondary">
       <i class="bi bi-pencil"></i> Edit
     </a>
-    <a href="{{ url_for('receipts_pdf', rid=r.id) }}" class="btn btn-sm btn-outline-danger" target="_blank" rel="noopener">
+    <button onclick="handlePdf('{{ url_for('receipts_pdf', rid=r.id) }}','{{ r.receipt_no }}.pdf')"
+            class="btn btn-sm btn-outline-danger" id="pdf-btn">
       <i class="bi bi-file-pdf"></i> PDF
-    </a>
+    </button>
     <form method="post" action="{{ url_for('receipts_delete', rid=r.id) }}"
           onsubmit="return confirm('Delete this receipt? This cannot be undone.')">
       <button class="btn btn-sm btn-danger"><i class="bi bi-trash"></i> Delete</button>
@@ -52,4 +53,45 @@
     </div>
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function handlePdf(url, filename) {
+  const btn = document.getElementById('pdf-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error('PDF fetch failed');
+    const blob = await resp.blob();
+    const file = new File([blob], filename, { type: 'application/pdf' });
+
+    // Native share sheet — works on Android Chrome PWA + iOS Safari PWA (iOS 15+)
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: filename });
+    } else {
+      // Desktop / unsupported: trigger download
+      const objUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objUrl;
+      a.download = filename;
+      a.target = '_blank';
+      a.rel = 'noopener';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(objUrl), 10000);
+    }
+  } catch (e) {
+    if (e.name !== 'AbortError') {
+      window.open(url, '_blank');
+    }
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-file-pdf"></i> PDF';
+  }
+}
+</script>
 {% endblock %}
