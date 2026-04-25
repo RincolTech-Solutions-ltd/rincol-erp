@@ -345,14 +345,48 @@ def receipts_list():
 @login_required
 def receipts_new():
     quotations = query("SELECT id, quotation_no, customer_name, customer_phone, total_amount FROM quotations ORDER BY date DESC LIMIT 100")
+
+    # Build a map of previously paid amounts per quotation
+    prev_paid_rows = query(
+        "SELECT quotation_id, COALESCE(SUM(amount_paid),0) AS total_paid "
+        "FROM receipts WHERE quotation_id IS NOT NULL GROUP BY quotation_id")
+    prev_paid = {str(row["quotation_id"]): float(row["total_paid"]) for row in (prev_paid_rows or [])}
+
     if request.method == "POST":
         f    = request.form
         rid  = str(uuid.uuid4())
-        rno  = f.get("receipt_no","").strip() or f"RCT-{date.today().year}-001"
-        fig  = float(f.get("amount_fig",0))
-        paid = float(f.get("amount_paid",0))
+        # Auto-generate next receipt number
+        yr   = date.today().year
+        last = query_one(
+            "SELECT receipt_no FROM receipts WHERE receipt_no LIKE %s ORDER BY receipt_no DESC LIMIT 1",
+            (f"RCT-{yr}-%",))
+        if last:
+            try:
+                last_num = int(last["receipt_no"].rsplit("-", 1)[-1])
+                rno = f"RCT-{yr}-{last_num+1:03d}"
+            except Exception:
+                rno = f"RCT-{yr}-001"
+        else:
+            rno = f"RCT-{yr}-001"
+        # Allow manual override if user typed one
+        manual_rno = f.get("receipt_no", "").strip()
+        if manual_rno and manual_rno != f"RCT-{yr}-???":
+            rno = manual_rno
+
+        fig  = float(f.get("amount_fig", 0))
+        paid = float(f.get("amount_paid", 0))
         qid  = f.get("quotation_id") or None
         mid  = f.get("maintenance_id") or None
+
+        # Balance = invoice total - all prior payments on this quotation - this payment
+        already_paid = 0.0
+        if qid:
+            row = query_one(
+                "SELECT COALESCE(SUM(amount_paid),0) AS total FROM receipts WHERE quotation_id=%s",
+                (qid,))
+            already_paid = float(row["total"]) if row else 0.0
+        balance = fig - already_paid - paid
+
         execute("""INSERT INTO receipts
             (id,receipt_no,date,customer_name,customer_phone,customer_email,
              customer_address,being_for,amount_fig,amount_paid,balance,cheque_no,
@@ -361,18 +395,34 @@ def receipts_new():
             (rid, rno, f.get("date") or date.today().isoformat(),
              f["customer_name"], f.get("customer_phone",""), f.get("customer_email",""),
              f.get("customer_address",""), f.get("being_for",""),
-             fig, paid, fig-paid, f.get("cheque_no",""),
+             fig, paid, balance, f.get("cheque_no",""),
              f.get("issued_name",""), f.get("received_name",""),
              f.get("collected_by","Hillary"), qid, mid))
         flash("Receipt saved.", "success")
         return redirect(url_for("receipts_view", rid=rid))
+
+    # Auto-generate next receipt number for pre-fill
+    yr = date.today().year
+    last = query_one(
+        "SELECT receipt_no FROM receipts WHERE receipt_no LIKE %s ORDER BY receipt_no DESC LIMIT 1",
+        (f"RCT-{yr}-%",))
+    if last:
+        try:
+            last_num = int(last["receipt_no"].rsplit("-", 1)[-1])
+            next_rno = f"RCT-{yr}-{last_num+1:03d}"
+        except Exception:
+            next_rno = f"RCT-{yr}-001"
+    else:
+        next_rno = f"RCT-{yr}-001"
+
     prefill_qid = request.args.get("qid")
     prefill_mid = request.args.get("mid")
-    # If coming from a maintenance record, prefill client details
     prefill_maint = None
     if prefill_mid:
         prefill_maint = query_one("SELECT * FROM maintenance_records WHERE id=%s", (prefill_mid,))
     return render_template("receipt/form.html", r=None, quotations=quotations,
+                           prev_paid=prev_paid,
+                           next_rno=next_rno,
                            prefill_qid=prefill_qid, prefill_mid=prefill_mid, prefill_maint=prefill_maint)
 
 
