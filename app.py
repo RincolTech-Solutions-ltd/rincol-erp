@@ -21,6 +21,7 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 from utils.db import query, query_one, execute, next_quotation_number, close_db
 from utils.pdf import build_quotation_pdf, build_receipt_pdf
+from utils.notify import notify_maintenance
 
 
 @app.teardown_appcontext
@@ -529,6 +530,9 @@ def maintenance_new():
              f.get("executor_name",""), float(f.get("executor_payment",0)),
              f.get("status","Open"), f.get("notes","")))
         flash("Maintenance record saved.", "success")
+        new_rec = query_one("SELECT * FROM maintenance_records ORDER BY created_at DESC LIMIT 1")
+        if new_rec:
+            notify_maintenance(new_rec, action="created")
         return redirect(url_for("maintenance_list"))
     prefill_qid = request.args.get("qid")
     return render_template("maintenance/form.html", r=None, quotations=quotations, prefill_qid=prefill_qid)
@@ -591,6 +595,9 @@ def maintenance_edit(mid):
              f.get("executor_name",""),float(f.get("executor_payment",0)),
              f.get("status","Open"),f.get("notes",""),mid))
         flash("Record updated.","success")
+        updated_rec = query_one("SELECT * FROM maintenance_records WHERE id=%s", (mid,))
+        if updated_rec:
+            notify_maintenance(updated_rec, action="updated")
         return redirect(url_for("maintenance_view", mid=mid))
     quotations = query("SELECT id, quotation_no, customer_name, customer_phone FROM quotations ORDER BY date DESC")
     return render_template("maintenance/form.html", r=r, quotations=quotations, prefill_qid=None)
