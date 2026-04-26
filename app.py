@@ -102,7 +102,7 @@ def dashboard():
             "           WHERE quotation_id IS NOT NULL GROUP BY quotation_id) r "
             "  ON r.quotation_id=q.id "
             "WHERE q.status NOT IN ('Cancelled','Pending')")["n"],
-        "maintenance": query_one("SELECT COUNT(*) AS n FROM maintenance_records WHERE status IN ('Open','Scheduled','In Progress','Pending Parts')")["n"],
+        "maintenance": query_one("SELECT COUNT(*) AS n FROM maintenance_records WHERE status IN ('Scheduled','Open','In Progress','Pending Parts')")["n"],
         "tasks_due":   query_one(
             "SELECT COUNT(*) AS n FROM tasks WHERE status != 'Done' AND due_date <= CURRENT_DATE + 3")["n"],
     }
@@ -530,8 +530,8 @@ def maintenance_new():
         execute("""INSERT INTO maintenance_records
             (linked_quotation_id,client_name,client_phone,visit_date,type,
              problem,parts_used,parts_cost,labour_fee,paid_by,h_ratio,d_ratio,
-             executor_name,executor_payment,status,notes)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+             executor_name,executor_payment,status,notes,cancellation_reason)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
             (f.get("linked_quotation_id") or None,
              f["client_name"], f.get("client_phone",""),
              f.get("visit_date") or date.today().isoformat(),
@@ -540,7 +540,8 @@ def maintenance_new():
              f.get("paid_by","Hillary"),
              int(f.get("h_ratio",100)), int(f.get("d_ratio",0)),
              f.get("executor_name",""), float(f.get("executor_payment",0)),
-             f.get("status","Open"), f.get("notes","")))
+             f.get("status","Open"), f.get("notes",""),
+             f.get("cancellation_reason","")))
         flash("Maintenance record saved.", "success")
         new_rec = query_one("SELECT * FROM maintenance_records ORDER BY created_at DESC LIMIT 1")
         if new_rec:
@@ -597,7 +598,7 @@ def maintenance_edit(mid):
             linked_quotation_id=%s,client_name=%s,client_phone=%s,visit_date=%s,
             type=%s,problem=%s,parts_used=%s,parts_cost=%s,labour_fee=%s,
             paid_by=%s,h_ratio=%s,d_ratio=%s,executor_name=%s,
-            executor_payment=%s,status=%s,notes=%s WHERE id=%s""",
+            executor_payment=%s,status=%s,notes=%s,cancellation_reason=%s WHERE id=%s""",
             (f.get("linked_quotation_id") or None,
              f["client_name"],f.get("client_phone",""),f.get("visit_date"),
              f.get("type","Paid"),f.get("problem",""),f.get("parts_used",""),
@@ -605,7 +606,8 @@ def maintenance_edit(mid):
              f.get("paid_by","Hillary"),
              int(f.get("h_ratio",100)),int(f.get("d_ratio",0)),
              f.get("executor_name",""),float(f.get("executor_payment",0)),
-             f.get("status","Open"),f.get("notes",""),mid))
+             f.get("status","Open"),f.get("notes",""),
+             f.get("cancellation_reason",""),mid))
         flash("Record updated.","success")
         updated_rec = query_one("SELECT * FROM maintenance_records WHERE id=%s", (mid,))
         if updated_rec:

@@ -64,7 +64,7 @@
           <div class="col-4">
             <label class="form-label">Status</label>
             <select name="status" id="maint_status" class="form-select form-select-sm" onchange="onStatusChange()">
-              {% for s in ['Scheduled','Open','In Progress','Pending Parts','Resolved'] %}
+              {% for s in ['Scheduled','Open','In Progress','Pending Parts','Resolved','Cancelled'] %}
               <option value="{{ s }}" {% if r and r.status==s %}selected{% elif not r and s=='Scheduled' %}selected{% endif %}>{{ s }}</option>
               {% endfor %}
             </select>
@@ -81,6 +81,12 @@
             <label class="form-label">Description / Reason for Visit</label>
             <textarea name="problem" class="form-control form-control-sm" rows="2"
                       placeholder="e.g. Battery not charging, inverter alarm...">{{ r.problem if r else '' }}</textarea>
+          </div>
+          <div class="col-12" id="cancel_reason_field" style="display:none">
+            <label class="form-label text-danger fw-semibold">Cancellation Reason *</label>
+            <textarea name="cancellation_reason" id="cancellation_reason"
+                      class="form-control form-control-sm border-danger" rows="3"
+                      placeholder="e.g. Need more information from supplier before scheduling a visit...">{{ r.cancellation_reason if r else '' }}</textarea>
           </div>
         </div>
       </div>
@@ -206,12 +212,15 @@
   if (qSel?.value) fillFromQuotation();
 
   function onStatusChange() {
-    const st        = document.getElementById('maint_status')?.value;
-    const lbl       = document.getElementById('date_label');
-    const workSecs  = document.getElementById('work_sections');
-    const scheduled = st === 'Scheduled';
-    if (lbl)      lbl.textContent = scheduled ? 'Scheduled Date' : 'Visit Date';
-    if (workSecs) workSecs.style.display = scheduled ? 'none' : '';
+    const st          = document.getElementById('maint_status')?.value;
+    const lbl         = document.getElementById('date_label');
+    const workSecs    = document.getElementById('work_sections');
+    const cancelField = document.getElementById('cancel_reason_field');
+    const scheduled   = st === 'Scheduled';
+    const cancelled   = st === 'Cancelled';
+    if (lbl)         lbl.textContent = scheduled ? 'Scheduled Date' : 'Visit Date';
+    if (workSecs)    workSecs.style.display = (scheduled || cancelled) ? 'none' : '';
+    if (cancelField) cancelField.style.display = cancelled ? '' : 'none';
   }
   window.onStatusChange = onStatusChange;
   onStatusChange();

@@ -11,7 +11,7 @@
 <form method="get" class="d-flex gap-2 mb-3">
   <select name="status" class="form-select form-select-sm" style="width:auto">
     <option value="">All statuses</option>
-    {% for s in ['Scheduled','Open','In Progress','Pending Parts','Resolved'] %}
+    {% for s in ['Scheduled','Open','In Progress','Pending Parts','Resolved','Cancelled'] %}
     <option value="{{ s }}" {% if status==s %}selected{% endif %}>{{ s }}</option>
     {% endfor %}
   </select>
@@ -43,6 +43,7 @@
                 {% elif r.status=='Open' %}badge-open
                 {% elif r.status=='In Progress' %}badge-in-progress
                 {% elif r.status=='Resolved' %}badge-resolved
+                {% elif r.status=='Cancelled' %}badge-cancelled
                 {% else %}badge-pending-parts{% endif %}">{{ r.status }}</span>
             </td>
             <td class="text-muted small">{{ r.executor_name or '—' }}</td>

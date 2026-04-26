@@ -16,7 +16,13 @@
     <div class="text-muted small">
       {{ r.visit_date }}
       &bull; <span class="badge {% if r.type=='Warranty' %}badge-warranty{% else %}badge-paid-type{% endif %}">{{ r.type }}</span>
-      &bull; <span class="badge {% if r.status=='Open' %}badge-open{% elif r.status=='Resolved' %}badge-resolved{% else %}badge-pending-parts{% endif %}">{{ r.status }}</span>
+      &bull; <span class="badge
+        {% if r.status=='Scheduled' %}badge-scheduled
+        {% elif r.status=='Open' %}badge-open
+        {% elif r.status=='In Progress' %}badge-in-progress
+        {% elif r.status=='Resolved' %}badge-resolved
+        {% elif r.status=='Cancelled' %}badge-cancelled
+        {% else %}badge-pending-parts{% endif %}">{{ r.status }}</span>
       {% if r.quotation_no %}&bull; Ref: <a href="{{ url_for('quotations_view', qid=r.linked_quotation_id) }}" class="text-muted">{{ r.quotation_no }}</a>{% endif %}
     </div>
   </div>
@@ -176,9 +182,15 @@
   <div class="card mb-3">
     <div class="card-header"><span class="section-header mb-0">Visit Details</span></div>
     <div class="card-body">
+      {% if r.status == 'Cancelled' and r.cancellation_reason %}
+      <div class="alert alert-danger py-2 mb-3">
+        <div class="small fw-semibold mb-1"><i class="bi bi-x-circle"></i> Cancellation Reason</div>
+        <div class="small">{{ r.cancellation_reason }}</div>
+      </div>
+      {% endif %}
       {% if r.problem %}
       <div class="mb-2">
-        <div class="small text-muted">Problem</div>
+        <div class="small text-muted">Description</div>
         <div class="small">{{ r.problem }}</div>
       </div>
       {% endif %}

@@ -114,11 +114,15 @@ def notify_maintenance(record: dict, action: str = "updated"):
     notes  = (r.get("notes") or "").strip()
     link   = f"{_APP_URL}/maintenance/{mid}"
 
+    cancel_reason = (r.get("cancellation_reason") or "").strip()
+
     tg = (f"{emoji} *Maintenance {action.title()}*\n"
           f"*Client:* {client}  |  {phone}\n"
           f"*Status:* {status}\n"
           f"*Date:* {date_}\n"
           f"*Description:* {desc}")
+    if cancel_reason:
+        tg += f"\n⚠️ *Cancellation Reason:* {cancel_reason}"
     if notes:
         tg += f"\n*Notes:* {notes}"
     tg += f"\n[View record]({link})"
@@ -126,6 +130,8 @@ def notify_maintenance(record: dict, action: str = "updated"):
     rows = (_row("Client", client) + _row("Phone", phone) +
             _row("Status", status) + _row("Date", date_) +
             _row("Description", desc))
+    if cancel_reason:
+        rows += _row("Cancellation Reason", f"<span style='color:#f87171'>{cancel_reason}</span>")
     if notes:
         rows += _row("Notes", notes)
 
