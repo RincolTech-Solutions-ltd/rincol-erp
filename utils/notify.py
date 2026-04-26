@@ -13,7 +13,7 @@ _TG_CHAT   = os.environ.get("TELEGRAM_CHAT_ID", "")
 _GM_USER   = os.environ.get("GMAIL_USER", "")
 _GM_PASS   = os.environ.get("GMAIL_APP_PASSWORD", "")
 _NOTIFY_TO = [e.strip() for e in os.environ.get("NOTIFY_EMAILS", "").split(",") if e.strip()]
-_APP_URL   = os.environ.get("APP_BASE_URL", "https://rincol-web.onrender.com")
+_APP_URL   = os.environ.get("APP_BASE_URL", "https://rincol-erp.onrender.com")
 
 
 # ── Internal send helpers ─────────────────────────────────────────────────────
