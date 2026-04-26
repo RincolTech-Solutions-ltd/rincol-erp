@@ -15,6 +15,12 @@ _GM_PASS   = os.environ.get("GMAIL_APP_PASSWORD", "")
 _NOTIFY_TO = [e.strip() for e in os.environ.get("NOTIFY_EMAILS", "").split(",") if e.strip()]
 _APP_URL   = os.environ.get("APP_BASE_URL", "https://rincol-erp.onrender.com")
 
+# Personal Telegram chat IDs — for DMs to assigned team members
+_PERSONAL_IDS = {
+    "hillary": os.environ.get("TELEGRAM_HILLARY_ID", ""),
+    "dennis":  os.environ.get("TELEGRAM_DENNIS_ID", ""),
+}
+
 
 # ── Low-level senders ─────────────────────────────────────────────────────────
 
@@ -25,6 +31,21 @@ def _send_telegram(text: str):
         requests.post(
             f"https://api.telegram.org/bot{_TG_TOKEN}/sendMessage",
             json={"chat_id": _TG_CHAT, "text": text, "parse_mode": "Markdown"},
+            timeout=8,
+        )
+    except Exception:
+        pass
+
+
+def _dm(person: str, text: str):
+    """Send a direct Telegram message to a team member by name (case-insensitive)."""
+    chat_id = _PERSONAL_IDS.get((person or "").strip().lower(), "")
+    if not _TG_TOKEN or not chat_id:
+        return
+    try:
+        requests.post(
+            f"https://api.telegram.org/bot{_TG_TOKEN}/sendMessage",
+            json={"chat_id": chat_id, "text": text, "parse_mode": "Markdown"},
             timeout=8,
         )
     except Exception:
@@ -135,9 +156,16 @@ def notify_maintenance(record: dict, action: str = "updated"):
     if notes:
         rows += _row("Notes", notes)
 
-    _fire(tg,
-          f"[Rincol ERP] Maintenance {action}: {client} — {status}",
-          _email_wrap(emoji, f"Maintenance {action.title()}", rows, link))
+    executor = (r.get("executor_name") or "").strip()
+
+    def _go():
+        _send_telegram(tg)
+        _send_email(f"[Rincol ERP] Maintenance {action}: {client} — {status}",
+                    _email_wrap(emoji, f"Maintenance {action.title()}", rows, link))
+        # DM the assigned executor if they're a known team member
+        if executor:
+            _dm(executor, tg)
+    threading.Thread(target=_go, daemon=True).start()
 
 
 # ── Quotations ────────────────────────────────────────────────────────────────
@@ -334,9 +362,14 @@ def notify_task(record: dict, action: str = "created"):
     if notes:
         rows += _row("Notes", notes)
 
-    _fire(tg,
-          f"[Rincol ERP] Task {action}: {title}",
-          _email_wrap(emoji, f"Task {action.title()}", rows, link, "View Task"))
+    def _go():
+        _send_telegram(tg)
+        _send_email(f"[Rincol ERP] Task {action}: {title}",
+                    _email_wrap(emoji, f"Task {action.title()}", rows, link, "View Task"))
+        # DM the assigned person directly
+        if assigned and assigned.lower() != "unassigned":
+            _dm(assigned, tg)
+    threading.Thread(target=_go, daemon=True).start()
 
 
 # ── Balancing settlements ─────────────────────────────────────────────────────
@@ -360,6 +393,11 @@ def notify_settlement(job: dict, amount: float, from_person: str, to_person: str
     if notes:
         rows += _row("Notes", notes)
 
-    _fire(tg,
-          f"[Rincol ERP] 🤝 Settlement — {from_person} → {to_person} — UGX {amount:,.0f}",
-          _email_wrap("🤝", "Settlement Recorded", rows, link, "View Balancing"))
+    def _go():
+        _send_telegram(tg)
+        _send_email(f"[Rincol ERP] 🤝 Settlement — {from_person} → {to_person} — UGX {amount:,.0f}",
+                    _email_wrap("🤝", "Settlement Recorded", rows, link, "View Balancing"))
+        # DM both parties
+        _dm(from_person, tg)
+        _dm(to_person, tg)
+    threading.Thread(target=_go, daemon=True).start()
