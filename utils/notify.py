@@ -87,7 +87,7 @@ def _email_wrap(header_emoji: str, header_text: str, rows_html: str, link: str, 
 
 _MAINT_EMOJI = {
     "Scheduled": "📅", "Open": "🔓", "In Progress": "🔧",
-    "Pending Parts": "⏳", "Resolved": "✅",
+    "Pending Parts": "⏳", "Resolved": "✅", "Cancelled": "❌",
 }
 _QUOT_EMOJI = {
     "Pending": "🕐", "Approved": "👍", "In Progress": "🔧",
