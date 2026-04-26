@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{% if r %}Edit Maintenance{% else %}Log Maintenance Visit{% endif %}{% endblock %}
+{% block title %}{% if r %}Edit Maintenance{% else %}New Maintenance{% endif %}{% endblock %}
 {% block breadcrumb %}
   <a href="{{ url_for('maintenance_list') }}" class="text-muted text-decoration-none">Maintenance</a>
   {% if r %}&rsaquo; <a href="{{ url_for('maintenance_view', mid=r.id) }}" class="text-muted text-decoration-none">{{ r.client_name }}</a>{% endif %}
@@ -15,7 +15,7 @@
     <div class="card mb-3">
       <div class="card-header"><span class="section-header mb-0">Linked Quotation</span></div>
       <div class="card-body">
-        <label class="form-label">Select Quotation <span class="text-muted">(optional — auto-fills client details)</span></label>
+        <label class="form-label">Select Quotation <span class="text-muted">(optional — leave blank for old/walk-in customers)</span></label>
         <select name="linked_quotation_id" id="maint_qid" class="form-select form-select-sm">
           <option value="">— None —</option>
           {% for q in quotations %}
@@ -57,23 +57,23 @@
       <div class="card-body">
         <div class="row g-2">
           <div class="col-4">
-            <label class="form-label">Visit Date</label>
-            <input type="date" name="visit_date" class="form-control form-control-sm"
+            <label class="form-label" id="date_label">Scheduled / Visit Date</label>
+            <input type="date" name="visit_date" id="visit_date" class="form-control form-control-sm"
                    value="{{ r.visit_date if r else '' }}">
+          </div>
+          <div class="col-4">
+            <label class="form-label">Status</label>
+            <select name="status" id="maint_status" class="form-select form-select-sm" onchange="onStatusChange()">
+              {% for s in ['Scheduled','Open','In Progress','Pending Parts','Resolved'] %}
+              <option value="{{ s }}" {% if r and r.status==s %}selected{% elif not r and s=='Scheduled' %}selected{% endif %}>{{ s }}</option>
+              {% endfor %}
+            </select>
           </div>
           <div class="col-4">
             <label class="form-label">Type</label>
             <select name="type" class="form-select form-select-sm">
               {% for t in ['Paid','Warranty'] %}
               <option value="{{ t }}" {% if r and r.type==t %}selected{% endif %}>{{ t }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="col-4">
-            <label class="form-label">Status</label>
-            <select name="status" class="form-select form-select-sm">
-              {% for s in ['Open','Resolved','Pending Parts'] %}
-              <option value="{{ s }}" {% if r and r.status==s %}selected{% endif %}>{{ s }}</option>
               {% endfor %}
             </select>
           </div>
@@ -190,6 +190,15 @@
 
   qSel?.addEventListener('change', fillFromQuotation);
   if (qSel?.value) fillFromQuotation();
+
+  // Update date label based on status
+  function onStatusChange() {
+    const st = document.getElementById('maint_status')?.value;
+    const lbl = document.getElementById('date_label');
+    if (lbl) lbl.textContent = st === 'Scheduled' ? 'Scheduled Date' : 'Visit Date';
+  }
+  window.onStatusChange = onStatusChange;
+  onStatusChange();
 
   // Ratio sync (keep sum = 100)
   const hR = document.getElementById('maint_h_ratio');

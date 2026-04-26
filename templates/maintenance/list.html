@@ -5,13 +5,13 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h5 class="mb-0">Maintenance Records</h5>
-  <a href="{{ url_for('maintenance_new') }}" class="btn btn-primary btn-sm"><i class="bi bi-plus"></i> Log Visit</a>
+  <a href="{{ url_for('maintenance_new') }}" class="btn btn-primary btn-sm"><i class="bi bi-plus"></i> New Maintenance</a>
 </div>
 
 <form method="get" class="d-flex gap-2 mb-3">
   <select name="status" class="form-select form-select-sm" style="width:auto">
     <option value="">All statuses</option>
-    {% for s in ['Open','Resolved','Pending Parts'] %}
+    {% for s in ['Scheduled','Open','In Progress','Pending Parts','Resolved'] %}
     <option value="{{ s }}" {% if status==s %}selected{% endif %}>{{ s }}</option>
     {% endfor %}
   </select>
@@ -24,7 +24,7 @@
     <div class="table-responsive">
       <table class="table table-hover mb-0">
         <thead>
-          <tr><th>Client</th><th>Phone</th><th>Type</th><th>Status</th><th>Executor</th><th class="text-end">Labour</th><th>Date</th><th></th></tr>
+          <tr><th>Client</th><th>Phone</th><th>Type</th><th>Status</th><th>Executor</th><th class="text-end">Labour</th><th>Sched / Visit Date</th><th></th></tr>
         </thead>
         <tbody>
           {% for r in records %}
@@ -38,7 +38,12 @@
               <span class="badge {% if r.type=='Warranty' %}badge-warranty{% else %}badge-paid-type{% endif %}">{{ r.type }}</span>
             </td>
             <td>
-              <span class="badge {% if r.status=='Open' %}badge-open{% elif r.status=='Resolved' %}badge-resolved{% else %}badge-pending-parts{% endif %}">{{ r.status }}</span>
+              <span class="badge
+                {% if r.status=='Scheduled' %}badge-scheduled
+                {% elif r.status=='Open' %}badge-open
+                {% elif r.status=='In Progress' %}badge-in-progress
+                {% elif r.status=='Resolved' %}badge-resolved
+                {% else %}badge-pending-parts{% endif %}">{{ r.status }}</span>
             </td>
             <td class="text-muted small">{{ r.executor_name or '—' }}</td>
             <td class="text-end money small">{{ '{:,.0f}'.format(r.labour_fee or 0) }}</td>

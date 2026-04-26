@@ -99,7 +99,7 @@ def dashboard():
             "           WHERE quotation_id IS NOT NULL GROUP BY quotation_id) r "
             "  ON r.quotation_id=q.id "
             "WHERE q.status NOT IN ('Cancelled','Pending')")["n"],
-        "maintenance": query_one("SELECT COUNT(*) AS n FROM maintenance_records WHERE status='Open'")["n"],
+        "maintenance": query_one("SELECT COUNT(*) AS n FROM maintenance_records WHERE status IN ('Open','Scheduled','In Progress','Pending Parts')")["n"],
         "tasks_due":   query_one(
             "SELECT COUNT(*) AS n FROM tasks WHERE status != 'Done' AND due_date <= CURRENT_DATE + 3")["n"],
     }

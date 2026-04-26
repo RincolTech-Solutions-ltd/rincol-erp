@@ -124,6 +124,7 @@ tr.dragging { opacity: 0.35; }
 .badge-pending-parts { background: rgba(167,139,250,.2); color: #a78bfa; }
 .badge-warranty   { background: rgba(137,180,250,.2); color: var(--accent-blue); }
 .badge-paid-type  { background: rgba(166,227,161,.2); color: var(--accent-green); }
+.badge-scheduled  { background: rgba(56,189,248,.2);  color: #38bdf8; }
 
 /* ── Forms ───────────────────────────────────────────────────────────────── */
 .form-control, .form-select {

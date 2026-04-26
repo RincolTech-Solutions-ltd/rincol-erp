@@ -15,7 +15,7 @@
     <a href="{{ url_for('receipts_edit', rid=r.id) }}" class="btn btn-sm btn-outline-secondary">
       <i class="bi bi-pencil"></i> Edit
     </a>
-    <button onclick="handlePdf('{{ url_for('receipts_pdf', rid=r.id) }}','{{ r.receipt_no }}.pdf')"
+    <button onclick="handlePdf()"
             class="btn btn-sm btn-outline-danger" id="pdf-btn">
       <i class="bi bi-file-pdf"></i> PDF
     </button>
@@ -57,41 +57,59 @@
 
 {% block scripts %}
 <script>
-async function handlePdf(url, filename) {
-  const btn = document.getElementById('pdf-btn');
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+(function(){
+  const PDF_URL  = '{{ url_for("receipts_pdf", rid=r.id) }}';
+  const PDF_NAME = '{{ r.receipt_no }}.pdf';
+  let _blob = null;
 
-  try {
-    const resp = await fetch(url);
-    if (!resp.ok) throw new Error('PDF fetch failed');
-    const blob = await resp.blob();
-    const file = new File([blob], filename, { type: 'application/pdf' });
+  // Pre-fetch in background so the blob is ready when the user taps Share
+  fetch(PDF_URL).then(r => r.ok ? r.blob() : null).then(b => { _blob = b; }).catch(() => {});
 
-    // Native share sheet — works on Android Chrome PWA + iOS Safari PWA (iOS 15+)
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      await navigator.share({ files: [file], title: filename });
-    } else {
-      // Desktop / unsupported: trigger download
-      const objUrl = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = objUrl;
-      a.download = filename;
-      a.target = '_blank';
-      a.rel = 'noopener';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(objUrl), 10000);
+  window.handlePdf = async function() {
+    const btn = document.getElementById('pdf-btn');
+
+    if (!_blob) {
+      // Blob not ready yet — fetch now (spinner, may break iOS gesture on slow connections)
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+      try {
+        const resp = await fetch(PDF_URL);
+        _blob = resp.ok ? await resp.blob() : null;
+      } catch(e) {}
     }
-  } catch (e) {
-    if (e.name !== 'AbortError') {
-      window.open(url, '_blank');
+
+    if (!_blob) {
+      // Total failure — open URL as last resort
+      window.open(PDF_URL, '_blank');
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-file-pdf"></i> PDF';
+      return;
     }
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = '<i class="bi bi-file-pdf"></i> PDF';
-  }
-}
+
+    try {
+      const file = new File([_blob], PDF_NAME, { type: 'application/pdf' });
+
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        // Native share sheet: WhatsApp, email, AirDrop, etc.
+        await navigator.share({ files: [file], title: PDF_NAME });
+      } else if (navigator.share) {
+        // URL-only share (older iOS / fallback)
+        await navigator.share({ url: PDF_URL, title: PDF_NAME });
+      } else {
+        // Desktop: trigger download
+        const objUrl = URL.createObjectURL(_blob);
+        const a = document.createElement('a');
+        a.href = objUrl; a.download = PDF_NAME;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(objUrl), 10000);
+      }
+    } catch(e) {
+      if (e.name !== 'AbortError') window.open(PDF_URL, '_blank');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-file-pdf"></i> PDF';
+    }
+  };
+})();
 </script>
 {% endblock %}
