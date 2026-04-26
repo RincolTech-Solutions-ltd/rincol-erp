@@ -21,7 +21,9 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 from utils.db import query, query_one, execute, next_quotation_number, close_db
 from utils.pdf import build_quotation_pdf, build_receipt_pdf
-from utils.notify import notify_maintenance
+from utils.notify import (notify_maintenance, notify_quotation,
+                           notify_quotation_status, notify_receipt,
+                           notify_task, notify_settlement)
 
 
 @app.teardown_appcontext
@@ -205,8 +207,9 @@ def quotations_edit(qid):
 
 
 def _save_quotation(qid):
-    f   = request.form
-    qid = qid or str(uuid.uuid4())
+    f          = request.form
+    _is_new    = qid is None
+    qid        = qid or str(uuid.uuid4())
     qno = f.get("quotation_no") or next_quotation_number()
 
     descs  = f.getlist("desc[]")
@@ -256,6 +259,9 @@ def _save_quotation(qid):
         execute("INSERT INTO quotation_items (quotation_id,line_no,description,uom,qty,unit_price,total) VALUES (%s,%s,%s,%s,%s,%s,%s)", it)
 
     flash("Quotation saved.", "success")
+    saved_q = query_one("SELECT * FROM quotations WHERE id=%s", (qid,))
+    if saved_q:
+        notify_quotation(dict(saved_q), action="created" if _is_new else "updated")
     return redirect(url_for("quotations_view", qid=qid))
 
 
@@ -279,6 +285,9 @@ def quotations_status(qid):
         flash(f'Job marked Completed. <a href="{maint_url}" class="alert-link">Schedule the warranty check</a> now.', "warning")
     else:
         flash(f"Status updated to {status}.", "success")
+    q_rec = query_one("SELECT * FROM quotations WHERE id=%s", (qid,))
+    if q_rec:
+        notify_quotation_status(dict(q_rec), new_status=status)
     return redirect(url_for("quotations_view", qid=qid))
 
 
@@ -408,6 +417,9 @@ def receipts_new():
              f.get("collected_by","Hillary"), qid, mid,
              f.get("payment_method","Cash")))
         flash("Receipt saved.", "success")
+        new_r = query_one("SELECT * FROM receipts WHERE id=%s", (rid,))
+        if new_r:
+            notify_receipt(dict(new_r))
         return redirect(url_for("receipts_view", rid=rid))
 
     # Auto-generate next receipt number for pre-fill
@@ -1081,14 +1093,22 @@ def balancing_spend_delete(jid, sid):
 @app.route("/balancing/<jid>/settlements/add", methods=["POST"])
 @login_required
 def balancing_settlement_add(jid):
-    f = request.form
+    f           = request.form
+    amount      = float(f["amount"])
+    from_person = f.get("from_person", "Hillary")
+    to_person   = "Dennis" if from_person == "Hillary" else "Hillary"
+    notes       = f.get("notes", "")
     execute(
         "INSERT INTO balancing_settlements (balancing_job_id, date, amount, from_person, notes) "
         "VALUES (%s,%s,%s,%s,%s)",
-        (jid, f.get("date") or date.today().isoformat(),
-         float(f["amount"]), f.get("from_person", "Hillary"), f.get("notes", ""))
+        (jid, f.get("date") or date.today().isoformat(), amount, from_person, notes)
     )
     flash("Settlement recorded.", "success")
+    job = query_one("SELECT bj.*, q.quotation_no FROM balancing_jobs bj "
+                    "LEFT JOIN quotations q ON q.id=bj.linked_quotation_id WHERE bj.id=%s", (jid,))
+    if job:
+        notify_settlement(dict(job), amount=amount,
+                          from_person=from_person, to_person=to_person, notes=notes)
     return redirect(url_for("balancing_view", jid=jid))
 
 
@@ -1153,6 +1173,14 @@ def tasks_edit(tid=None):
                  f.get("assigned_to",""), f.get("linked_quotation_id") or None,
                  f.get("notes","")))
         flash("Task saved.", "success")
+        if tid:
+            saved_t = query_one("SELECT * FROM tasks WHERE id=%s", (tid,))
+            if saved_t:
+                notify_task(dict(saved_t), action="updated")
+        else:
+            saved_t = query_one("SELECT * FROM tasks ORDER BY id DESC LIMIT 1")
+            if saved_t:
+                notify_task(dict(saved_t), action="created")
         return redirect(url_for("tasks_list"))
     quotations = query("SELECT id, quotation_no, customer_name FROM quotations ORDER BY date DESC LIMIT 100")
     return render_template("tasks/form.html", task=task, quotations=quotations)
@@ -1163,6 +1191,9 @@ def tasks_edit(tid=None):
 def tasks_done(tid):
     execute("UPDATE tasks SET status='Done', updated_at=NOW() WHERE id=%s", (tid,))
     flash("Task marked done.", "success")
+    done_t = query_one("SELECT * FROM tasks WHERE id=%s", (tid,))
+    if done_t:
+        notify_task(dict(done_t), action="completed")
     return redirect(url_for("tasks_list"))
 
 
