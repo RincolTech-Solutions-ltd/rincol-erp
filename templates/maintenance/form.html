@@ -78,9 +78,21 @@
             </select>
           </div>
           <div class="col-12">
-            <label class="form-label">Problem Description</label>
-            <textarea name="problem" class="form-control form-control-sm" rows="2">{{ r.problem if r else '' }}</textarea>
+            <label class="form-label">Description / Reason for Visit</label>
+            <textarea name="problem" class="form-control form-control-sm" rows="2"
+                      placeholder="e.g. Battery not charging, inverter alarm...">{{ r.problem if r else '' }}</textarea>
           </div>
+        </div>
+      </div>
+    </div>
+
+    {# ── Work Details — hidden when Scheduled ─────────────────────────── #}
+    <div id="work_sections">
+
+    <div class="card mb-3">
+      <div class="card-header"><span class="section-header mb-0">Work Done</span></div>
+      <div class="card-body">
+        <div class="row g-2">
           <div class="col-12">
             <label class="form-label">Parts Used</label>
             <textarea name="parts_used" class="form-control form-control-sm" rows="2">{{ r.parts_used if r else '' }}</textarea>
@@ -164,6 +176,8 @@
       </div>
     </div>
 
+    </div>{# end #work_sections #}
+
     <div class="d-flex gap-2">
       <button type="submit" class="btn btn-success"><i class="bi bi-check2-circle"></i> Save</button>
       <a href="{{ url_for('maintenance_list') }}" class="btn btn-outline-secondary">Cancel</a>
@@ -191,11 +205,13 @@
   qSel?.addEventListener('change', fillFromQuotation);
   if (qSel?.value) fillFromQuotation();
 
-  // Update date label based on status
   function onStatusChange() {
-    const st = document.getElementById('maint_status')?.value;
-    const lbl = document.getElementById('date_label');
-    if (lbl) lbl.textContent = st === 'Scheduled' ? 'Scheduled Date' : 'Visit Date';
+    const st        = document.getElementById('maint_status')?.value;
+    const lbl       = document.getElementById('date_label');
+    const workSecs  = document.getElementById('work_sections');
+    const scheduled = st === 'Scheduled';
+    if (lbl)      lbl.textContent = scheduled ? 'Scheduled Date' : 'Visit Date';
+    if (workSecs) workSecs.style.display = scheduled ? 'none' : '';
   }
   window.onStatusChange = onStatusChange;
   onStatusChange();
