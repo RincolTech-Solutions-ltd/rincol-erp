@@ -261,7 +261,17 @@ def _save_quotation(qid):
     flash("Quotation saved.", "success")
     saved_q = query_one("SELECT * FROM quotations WHERE id=%s", (qid,))
     if saved_q:
-        notify_quotation(dict(saved_q), action="created" if _is_new else "updated")
+        # Build PDF bytes for customer email (only on new quotations with a customer email)
+        pdf_bytes = None
+        if _is_new and saved_q.get("customer_email", "").strip():
+            try:
+                saved_items = query("SELECT * FROM quotation_items WHERE quotation_id=%s ORDER BY line_no", (qid,))
+                pdf_bytes   = build_quotation_pdf(dict(saved_q), [dict(i) for i in saved_items],
+                                                  sig_bytes=_load_default_sig())
+            except Exception:
+                pdf_bytes = None
+        notify_quotation(dict(saved_q), action="created" if _is_new else "updated",
+                         pdf_bytes=pdf_bytes)
     return redirect(url_for("quotations_view", qid=qid))
 
 
