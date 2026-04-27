@@ -187,8 +187,12 @@ def quotations_view(qid):
     execs    = query("SELECT * FROM job_executions WHERE quotation_id=%s ORDER BY execution_date DESC", (qid,))
     paid     = sum(r["amount_paid"] for r in receipts)
     balance  = (q["total_amount"] or 0) - paid
+    _default_executors = ['Hillary', 'Dennis']
+    _extra_exec = query("SELECT DISTINCT executor_name FROM job_executions WHERE executor_name IS NOT NULL AND executor_name != '' ORDER BY executor_name")
+    executor_names = list(dict.fromkeys(_default_executors + [r['executor_name'] for r in _extra_exec if r['executor_name'] not in _default_executors]))
     return render_template("quotation/view.html", q=q, items=items,
-                           receipts=receipts, execs=execs, paid=paid, balance=balance)
+                           receipts=receipts, execs=execs, paid=paid, balance=balance,
+                           executor_names=executor_names)
 
 
 @app.route("/quotations/<qid>/edit", methods=["GET", "POST"])
@@ -1201,7 +1205,10 @@ def tasks_edit(tid=None):
                 notify_task(dict(saved_t), action="created")
         return redirect(url_for("tasks_list"))
     quotations = query("SELECT id, quotation_no, customer_name FROM quotations ORDER BY date DESC LIMIT 100")
-    return render_template("tasks/form.html", task=task, quotations=quotations)
+    _default_members = ['Hillary', 'Dennis', 'Both']
+    _extra = query("SELECT DISTINCT assigned_to FROM tasks WHERE assigned_to IS NOT NULL AND assigned_to != '' ORDER BY assigned_to")
+    team_members = list(dict.fromkeys(_default_members + [r['assigned_to'] for r in _extra if r['assigned_to'] not in _default_members]))
+    return render_template("tasks/form.html", task=task, quotations=quotations, team_members=team_members)
 
 
 @app.route("/tasks/<int:tid>/done", methods=["POST"])

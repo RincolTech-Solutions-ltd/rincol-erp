@@ -48,8 +48,19 @@
           </div>
           <div class="col-6">
             <label class="form-label">Assigned To</label>
-            <input type="text" name="assigned_to" class="form-control form-control-sm"
-                   value="{{ task.assigned_to if task else '' }}" placeholder="Hillary / Dennis / Both">
+            <select id="sel_assigned_to" class="form-select form-select-sm"
+                    onchange="nameDropdown(this,'inp_assigned_to')">
+              <option value="">— Select —</option>
+              {% for nm in team_members %}
+              <option value="{{ nm }}">{{ nm }}</option>
+              {% endfor %}
+              <option value="__new__">+ Add new person…</option>
+            </select>
+            <input type="text" name="assigned_to" id="inp_assigned_to"
+                   class="form-control form-control-sm mt-1"
+                   placeholder="Type new name and save"
+                   style="display:none"
+                   value="{{ task.assigned_to if task else '' }}">
           </div>
           <div class="col-12">
             <label class="form-label">Linked Quotation <span class="text-muted">(optional)</span></label>
@@ -85,4 +96,38 @@
   </div>
 </div>
 </form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function nameDropdown(sel, inputId) {
+  var inp = document.getElementById(inputId);
+  if (sel.value === '__new__') {
+    inp.style.display = '';
+    inp.value = '';
+    inp.focus();
+  } else {
+    inp.style.display = 'none';
+    inp.value = sel.value;
+  }
+}
+function initNameDropdown(selId, inpId) {
+  var sel = document.getElementById(selId);
+  var inp = document.getElementById(inpId);
+  if (!sel || !inp || !inp.value) return;
+  var current = inp.value;
+  for (var i = 0; i < sel.options.length; i++) {
+    if (sel.options[i].value === current) {
+      sel.value = current;
+      inp.style.display = 'none';
+      return;
+    }
+  }
+  sel.value = '__new__';
+  inp.style.display = '';
+}
+document.addEventListener('DOMContentLoaded', function() {
+  initNameDropdown('sel_assigned_to', 'inp_assigned_to');
+});
+</script>
 {% endblock %}
