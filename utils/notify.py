@@ -372,6 +372,41 @@ def notify_task(record: dict, action: str = "created"):
     threading.Thread(target=_go, daemon=True).start()
 
 
+# ── Balancing jobs ───────────────────────────────────────────────────────────
+
+def notify_balancing_job(record: dict, action: str = "created"):
+    """action: 'created' | 'updated'"""
+    j        = record
+    jid      = j.get("id", "")
+    job_name = j.get("job_name") or "—"
+    qno      = j.get("quotation_no") or "—"
+    quoted   = j.get("quoted") or 0
+    h_ratio  = j.get("h_ratio") or 0
+    d_ratio  = j.get("d_ratio") or 0
+    notes    = (j.get("notes") or "").strip()
+    link     = f"{_APP_URL}/balancing/{jid}"
+    emoji    = "📊"
+
+    tg = (f"{emoji} *Balancing Job {action.title()}*\n"
+          f"*Job:* {job_name}\n"
+          f"*Quotation:* {qno}\n"
+          f"*Quoted:* UGX {quoted:,.0f}\n"
+          f"*Split:* Hillary {h_ratio}% / Dennis {d_ratio}%")
+    if notes:
+        tg += f"\n*Notes:* {notes}"
+    tg += f"\n[View job]({link})"
+
+    rows = (_row("Job", job_name) + _row("Quotation", qno) +
+            _row("Quoted Amount", f"UGX {quoted:,.0f}") +
+            _row("Split", f"Hillary {h_ratio}% / Dennis {d_ratio}%"))
+    if notes:
+        rows += _row("Notes", notes)
+
+    _fire(tg,
+          f"[Rincol ERP] Balancing {action}: {job_name}",
+          _email_wrap(emoji, f"Balancing Job {action.title()}", rows, link, "View Job"))
+
+
 # ── Balancing settlements ─────────────────────────────────────────────────────
 
 def notify_settlement(job: dict, amount: float, from_person: str, to_person: str, notes: str = ""):

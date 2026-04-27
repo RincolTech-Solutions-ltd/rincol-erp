@@ -23,7 +23,7 @@ from utils.db import query, query_one, execute, next_quotation_number, close_db
 from utils.pdf import build_quotation_pdf, build_receipt_pdf
 from utils.notify import (notify_maintenance, notify_quotation,
                            notify_quotation_status, notify_receipt,
-                           notify_task, notify_settlement)
+                           notify_task, notify_settlement, notify_balancing_job)
 
 
 @app.teardown_appcontext
@@ -991,6 +991,7 @@ def balancing_report():
 @app.route("/balancing/<jid>/edit", methods=["GET","POST"])
 @login_required
 def balancing_edit(jid=None):
+    _is_new = jid is None
     job = query_one("SELECT * FROM balancing_jobs WHERE id=%s", (jid,)) if jid else None
     existing_spend = query(
         "SELECT * FROM balancing_spend_lines WHERE balancing_job_id=%s ORDER BY id", (jid,)
@@ -1028,6 +1029,11 @@ def balancing_edit(jid=None):
                     (jid, desc.strip(), paid_by, float(amt))
                 )
         flash("Job saved.", "success")
+        saved_job = query_one(
+            "SELECT bj.*, q.quotation_no FROM balancing_jobs bj "
+            "LEFT JOIN quotations q ON q.id=bj.linked_quotation_id WHERE bj.id=%s", (jid,))
+        if saved_job:
+            notify_balancing_job(dict(saved_job), action="created" if _is_new else "updated")
         return redirect(url_for("balancing_view", jid=jid))
 
     # ?qid= prefill for new jobs
