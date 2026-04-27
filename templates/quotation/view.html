@@ -44,8 +44,66 @@
 </div>
 
 <div class="row g-3">
-  {# ── Left: items + payments ───────────────────────────────────────────── #}
-  <div class="col-lg-8">
+
+  {# ── Right sidebar: details + execution — first in HTML so mobile sees it first ── #}
+  <div class="col-lg-4 order-lg-2">
+    {# Details #}
+    <div class="card mb-3">
+      <div class="card-header"><span class="section-header mb-0">Details</span></div>
+      <div class="card-body p-0">
+        <table class="table table-sm mb-0">
+          <tbody>
+            <tr><td class="text-muted small">Delivery</td><td class="small">{{ q.delivery }}</td></tr>
+            <tr><td class="text-muted small">Validity</td><td class="small">{{ q.validity }}</td></tr>
+            <tr><td class="text-muted small">Warranty</td><td class="small">{{ q.warranty }}</td></tr>
+            <tr><td class="text-muted small">Payment</td><td class="small">{{ q.payment_terms }}</td></tr>
+            {% if q.customer_phone %}<tr><td class="text-muted small">Phone</td><td class="small">{{ q.customer_phone }}</td></tr>{% endif %}
+            {% if q.customer_email %}<tr><td class="text-muted small">Email</td><td class="small">{{ q.customer_email }}</td></tr>{% endif %}
+            {% if q.notes %}<tr><td class="text-muted small">Notes</td><td class="small">{{ q.notes }}</td></tr>{% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    {# Executions — one record per job, editable in place #}
+    {% set exe = execs[0] if execs else None %}
+    <div class="card">
+      <div class="card-header"><span class="section-header mb-0">Job Execution</span></div>
+      <div class="card-body">
+        <form method="post" action="{{ url_for('executions_add', qid=q.id) }}" class="row g-2">
+          <div class="col-12">
+            <label class="form-label">Executor Name</label>
+            <input type="text" name="executor_name" class="form-control form-control-sm" required
+                   placeholder="e.g. Dennis"
+                   value="{{ exe.executor_name if exe else '' }}">
+          </div>
+          <div class="col-6">
+            <label class="form-label">Date</label>
+            <input type="date" name="execution_date" class="form-control form-control-sm"
+                   value="{{ exe.execution_date if exe else '' }}">
+          </div>
+          <div class="col-6">
+            <label class="form-label">Pay (UGX)</label>
+            <input type="number" name="executor_payment" class="form-control form-control-sm" min="0" step="any"
+                   value="{{ exe.executor_payment if exe else 0 }}">
+          </div>
+          <div class="col-12">
+            <label class="form-label">Notes</label>
+            <input type="text" name="notes" class="form-control form-control-sm"
+                   value="{{ exe.notes if exe else '' }}">
+          </div>
+          <div class="col-12">
+            <button type="submit" class="btn btn-sm btn-outline-secondary w-100">
+              {% if exe %}<i class="bi bi-pencil"></i> Update Execution{% else %}<i class="bi bi-plus"></i> Save Execution{% endif %}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  {# ── Main content: line items + payment history ────────────────────────── #}
+  <div class="col-lg-8 order-lg-1">
     {# Line items #}
     <div class="card mb-3">
       <div class="card-header"><span class="section-header mb-0">Line Items</span></div>
@@ -148,61 +206,5 @@
     </div>
   </div>
 
-  {# ── Right: details + executions ──────────────────────────────────────── #}
-  <div class="col-lg-4">
-    {# Details #}
-    <div class="card mb-3">
-      <div class="card-header"><span class="section-header mb-0">Details</span></div>
-      <div class="card-body p-0">
-        <table class="table table-sm mb-0">
-          <tbody>
-            <tr><td class="text-muted small">Delivery</td><td class="small">{{ q.delivery }}</td></tr>
-            <tr><td class="text-muted small">Validity</td><td class="small">{{ q.validity }}</td></tr>
-            <tr><td class="text-muted small">Warranty</td><td class="small">{{ q.warranty }}</td></tr>
-            <tr><td class="text-muted small">Payment</td><td class="small">{{ q.payment_terms }}</td></tr>
-            {% if q.customer_phone %}<tr><td class="text-muted small">Phone</td><td class="small">{{ q.customer_phone }}</td></tr>{% endif %}
-            {% if q.customer_email %}<tr><td class="text-muted small">Email</td><td class="small">{{ q.customer_email }}</td></tr>{% endif %}
-            {% if q.notes %}<tr><td class="text-muted small">Notes</td><td class="small">{{ q.notes }}</td></tr>{% endif %}
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    {# Executions — one record per job, editable in place #}
-    {% set exe = execs[0] if execs else None %}
-    <div class="card">
-      <div class="card-header"><span class="section-header mb-0">Job Execution</span></div>
-      <div class="card-body">
-        <form method="post" action="{{ url_for('executions_add', qid=q.id) }}" class="row g-2">
-          <div class="col-12">
-            <label class="form-label">Executor Name</label>
-            <input type="text" name="executor_name" class="form-control form-control-sm" required
-                   placeholder="e.g. Dennis"
-                   value="{{ exe.executor_name if exe else '' }}">
-          </div>
-          <div class="col-6">
-            <label class="form-label">Date</label>
-            <input type="date" name="execution_date" class="form-control form-control-sm"
-                   value="{{ exe.execution_date if exe else '' }}">
-          </div>
-          <div class="col-6">
-            <label class="form-label">Pay (UGX)</label>
-            <input type="number" name="executor_payment" class="form-control form-control-sm" min="0" step="any"
-                   value="{{ exe.executor_payment if exe else 0 }}">
-          </div>
-          <div class="col-12">
-            <label class="form-label">Notes</label>
-            <input type="text" name="notes" class="form-control form-control-sm"
-                   value="{{ exe.notes if exe else '' }}">
-          </div>
-          <div class="col-12">
-            <button type="submit" class="btn btn-sm btn-outline-secondary w-100">
-              {% if exe %}<i class="bi bi-pencil"></i> Update Execution{% else %}<i class="bi bi-plus"></i> Save Execution{% endif %}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  </div>
 </div>
 {% endblock %}

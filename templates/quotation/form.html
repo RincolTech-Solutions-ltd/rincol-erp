@@ -15,8 +15,8 @@ window.CATALOG_ITEMS = {{ catalog | tojson }};
   {# ── Left column: customer + terms ────────────────────────────────────── #}
   <div class="col-lg-4">
 
-    {# Quick Build #}
-    {% if templates %}
+    {# Quick Build — only for new quotations or Pending status #}
+    {% if templates and (not q or q.status == 'Pending') %}
     <div class="card mb-3">
       <div class="card-header"><span class="section-header mb-0">⚡ Quick Build</span></div>
       <div class="card-body">
