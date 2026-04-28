@@ -390,7 +390,7 @@ def receipts_list():
 @app.route("/receipts/new", methods=["GET", "POST"])
 @login_required
 def receipts_new():
-    quotations = query("SELECT id, quotation_no, customer_name, customer_phone, total_amount FROM quotations ORDER BY date DESC LIMIT 100")
+    quotations = query("SELECT id, quotation_no, customer_name, customer_phone, customer_email, total_amount FROM quotations ORDER BY date DESC LIMIT 100")
 
     # Build a map of previously paid amounts per quotation
     prev_paid_rows = query(
@@ -495,6 +495,7 @@ def receipts_new():
                            prev_paid=prev_paid,
                            being_for_map=being_for_map,
                            next_rno=next_rno,
+                           today=date.today().isoformat(),
                            prefill_qid=prefill_qid, prefill_mid=prefill_mid, prefill_maint=prefill_maint)
 
 
@@ -553,7 +554,7 @@ def receipts_edit(rid):
                 else:
                     flash(f"⚠️ PDF generation failed — receipt was NOT emailed to {customer_name} ({customer_email}).", "warning")
         return redirect(url_for("receipts_view", rid=rid))
-    quotations = query("SELECT id, quotation_no, customer_name, customer_phone, total_amount FROM quotations ORDER BY date DESC LIMIT 100")
+    quotations = query("SELECT id, quotation_no, customer_name, customer_phone, customer_email, total_amount FROM quotations ORDER BY date DESC LIMIT 100")
     return render_template("receipt/form.html", r=r, quotations=quotations, prefill_qid=None)
 
 
