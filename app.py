@@ -283,7 +283,76 @@ def _save_quotation(qid):
                 flash(f"⚠️ PDF generation failed — quotation was NOT emailed to {customer_name} ({customer_email}).", "warning")
         notify_quotation(dict(saved_q), action="created" if _is_new else "updated",
                          pdf_bytes=pdf_bytes)
+        if saved_q.get("status") == "Approved":
+            _maybe_create_approval_task(qid, dict(saved_q))
     return redirect(url_for("quotations_view", qid=qid))
+
+
+def _maybe_create_approval_task(qid: str, q_rec: dict):
+    """Auto-create a job execution task when a quotation is approved.
+    Safe to call multiple times — skips if a task linked to this quotation already exists.
+    """
+    existing = query_one("SELECT id FROM tasks WHERE linked_quotation_id=%s LIMIT 1", (qid,))
+    if existing:
+        return  # already has a task, don't duplicate
+
+    qno    = q_rec.get("quotation_no", "—")
+    client = q_rec.get("customer_name", "—")
+    phone  = q_rec.get("customer_phone") or "—"
+    addr   = q_rec.get("customer_address") or "—"
+    amount = q_rec.get("total_amount") or 0
+    title_ = (q_rec.get("title") or "").strip()
+
+    # Build system description from line items (same logic as /api/quotation/.../being-for)
+    items = query(
+        "SELECT description, qty FROM quotation_items "
+        "WHERE quotation_id=%s AND description<>'' ORDER BY line_no", (qid,))
+    _KW = [
+        ("inverter",          ["inverter", "ups ", "u.p.s"]),
+        ("battery",           ["battery", "batteries", "lithium", "lifepo4", "gel battery", "agm"]),
+        ("solar panel",       ["solar panel", "pv module", "pv panel", "solar module", " panel"]),
+        ("charge controller", ["charge controller", "mppt", "pwm controller"]),
+        ("transfer switch",   ["transfer switch", "ats", "changeover"]),
+    ]
+    found = {}
+    for row in (items or []):
+        dl = (row["description"] or "").lower()
+        qty_str = f"{row['qty']:g}× " if (row.get("qty") or 1) != 1 else ""
+        for group, kws in _KW:
+            if group in found:
+                continue
+            if any(k in dl for k in kws):
+                short = row["description"].strip()
+                found[group] = f"{qty_str}{short[:57]}{'…' if len(short)>57 else ''}"
+    priority_order = ["inverter", "battery", "solar panel", "charge controller", "transfer switch"]
+    spec_parts = [found[k] for k in priority_order if k in found]
+
+    if title_ and title_.lower() not in ("quotation", "quote") and spec_parts:
+        system_desc = f"Supply and installation of {title_} — {', '.join(spec_parts)}"
+    elif title_ and title_.lower() not in ("quotation", "quote"):
+        system_desc = f"Supply and installation of {title_}"
+    elif spec_parts:
+        system_desc = f"Supply and installation of {', '.join(spec_parts)}"
+    else:
+        system_desc = f"Execute job for {client}"
+
+    notes = (f"Customer: {client}\n"
+             f"Phone: {phone}\n"
+             f"Address: {addr}\n"
+             f"Quotation: {qno}\n"
+             f"Amount: UGX {amount:,.0f}\n\n"
+             f"{system_desc}")
+
+    execute(
+        "INSERT INTO tasks (title, description, due_date, priority, status, assigned_to, linked_quotation_id, notes) "
+        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
+        (f"Execute: {qno} — {client}", system_desc,
+         None, "High", "Pending", "Dennis", qid, notes))
+
+    new_t = query_one("SELECT * FROM tasks ORDER BY id DESC LIMIT 1")
+    if new_t:
+        notify_task(dict(new_t), action="created")
+    flash(f'✅ Task created for <strong>{qno}</strong> — assigned to Dennis.', "info")
 
 
 @app.route("/quotations/<qid>/pdf")
@@ -324,6 +393,8 @@ def quotations_status(qid):
             else:
                 flash(f"⚠️ PDF generation failed — quotation was NOT emailed to {customer_name} ({customer_email}).", "warning")
         notify_quotation_status(dict(q_rec), new_status=status, pdf_bytes=pdf_bytes)
+        if status == "Approved":
+            _maybe_create_approval_task(qid, dict(q_rec))
     return redirect(url_for("quotations_view", qid=qid))
 
 
