@@ -18,7 +18,7 @@
   <div class="col-auto">
     <select name="status" class="form-select form-select-sm">
       <option value="">All statuses</option>
-      {% for s in ['Pending','Approved','In Progress','Completed','Cancelled'] %}
+      {% for s in ['Draft','Pending','Approved','In Progress','Completed','Cancelled'] %}
       <option value="{{ s }}" {% if status==s %}selected{% endif %}>{{ s }}</option>
       {% endfor %}
     </select>
@@ -48,7 +48,7 @@
             <td class="text-end money">{{ '{:,.0f}'.format(q.total_amount or 0) }}</td>
             <td>
               {% set s = q.status %}
-              <span class="badge {% if s=='Pending' %}badge-pending{% elif s=='Approved' %}badge-approved{% elif s=='In Progress' %}badge-in-progress{% elif s=='Completed' %}badge-completed{% else %}badge-cancelled{% endif %}">{{ s }}</span>
+              <span class="badge {% if s=='Draft' %}badge-draft{% elif s=='Pending' %}badge-pending{% elif s=='Approved' %}badge-approved{% elif s=='In Progress' %}badge-in-progress{% elif s=='Completed' %}badge-completed{% else %}badge-cancelled{% endif %}">{{ s }}</span>
             </td>
             <td>
               {% set paid = q.paid or 0 %}

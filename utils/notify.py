@@ -111,7 +111,7 @@ _MAINT_EMOJI = {
     "Pending Parts": "⏳", "Resolved": "✅", "Cancelled": "❌",
 }
 _QUOT_EMOJI = {
-    "Pending": "🕐", "Approved": "👍", "In Progress": "🔧",
+    "Draft": "📝", "Pending": "🕐", "Approved": "👍", "In Progress": "🔧",
     "Completed": "✅", "Cancelled": "❌",
 }
 _TASK_PRIORITY_EMOJI = {"Urgent": "🚨", "High": "🔴", "Normal": "🟡", "Low": "⚪"}
@@ -171,7 +171,11 @@ def notify_maintenance(record: dict, action: str = "updated"):
 # ── Quotations ────────────────────────────────────────────────────────────────
 
 def notify_quotation(record: dict, action: str = "created", pdf_bytes: bytes = None):
-    """action: 'created' | 'updated'. pdf_bytes: if provided + customer_email present, sends PDF to customer."""
+    """action: 'created' | 'updated'.
+    Draft  → group Telegram + team email + DM Hillary & Dennis. No customer email.
+    Pending/Approved → group + team + DMs + customer email with PDF (if pdf_bytes + customer_email).
+    Other statuses → group + team + DMs. No customer email.
+    """
     q              = record
     qid            = q.get("id", "")
     qno            = q.get("quotation_no", "—")
@@ -183,7 +187,6 @@ def notify_quotation(record: dict, action: str = "created", pdf_bytes: bytes = N
     emoji          = _QUOT_EMOJI.get(status, "📋")
     link           = f"{_APP_URL}/quotations/{qid}"
 
-    # ── Internal team notification ────────────────────────────────────────────
     tg = (f"{emoji} *Quotation {action.title()}*\n"
           f"*Ref:* {qno}\n"
           f"*Client:* {client}  |  {phone}\n"
@@ -199,23 +202,38 @@ def notify_quotation(record: dict, action: str = "created", pdf_bytes: bytes = N
         _send_telegram(tg)
         _send_email(f"[Rincol ERP] Quotation {action}: {qno} — {client}",
                     _email_wrap(emoji, f"Quotation {action.title()}", rows, link, "View Quotation"))
-        # ── Customer email with PDF attached ─────────────────────────────────
-        if pdf_bytes and customer_email:
-            _send_quotation_to_customer(qno, client, amount, customer_email, pdf_bytes)
+        _dm("hillary", tg)
+        _dm("dennis", tg)
+        # Customer email only when quotation is being shared (Pending) or confirmed (Approved)
+        if pdf_bytes and customer_email and status in ("Pending", "Approved"):
+            _send_quotation_to_customer(qno, client, amount, customer_email, pdf_bytes, status)
     threading.Thread(target=_go, daemon=True).start()
 
 
 def _send_quotation_to_customer(qno: str, client: str, amount: float,
-                                 customer_email: str, pdf_bytes: bytes):
-    """Send a professional email to the customer with the quotation PDF attached."""
+                                 customer_email: str, pdf_bytes: bytes,
+                                 status: str = "Pending"):
+    """Send a professional email to the customer with the quotation PDF attached.
+    status='Pending'  → 'please find attached our quotation for your review'
+    status='Approved' → 'thank you for approving — here is your confirmed quotation'
+    """
     if not _GM_USER or not _GM_PASS:
         return
     try:
         from email.mime.base import MIMEBase
         from email import encoders
 
+        if status == "Approved":
+            subject    = f"Approved Quotation {qno} — Rincol Tech Solutions Ltd"
+            intro_line = (f"Thank you for approving quotation <strong>{qno}</strong>. "
+                          f"Please find your confirmed quotation attached for your records.")
+        else:
+            subject    = f"Quotation {qno} — Rincol Tech Solutions Ltd"
+            intro_line = (f"Thank you for your interest. Please find attached our quotation "
+                          f"<strong>{qno}</strong> for your review.")
+
         msg = MIMEMultipart("mixed")
-        msg["Subject"] = f"Quotation {qno} — Rincol Tech Solutions Ltd"
+        msg["Subject"] = subject
         msg["From"]    = f"Rincol Tech Solutions <{_GM_USER}>"
         msg["To"]      = customer_email
 
@@ -227,10 +245,7 @@ def _send_quotation_to_customer(qno: str, client: str, amount: float,
           </div>
           <div style="border:1px solid #e5e7eb;border-top:none;padding:28px;border-radius:0 0 8px 8px">
             <p style="margin:0 0 16px">Dear <strong>{client}</strong>,</p>
-            <p style="margin:0 0 16px;color:#374151">
-              Thank you for your interest. Please find attached our quotation
-              <strong>{qno}</strong> for your review.
-            </p>
+            <p style="margin:0 0 16px;color:#374151">{intro_line}</p>
             <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:16px;margin:20px 0">
               <table style="border-collapse:collapse;width:100%">
                 <tr>
@@ -240,6 +255,10 @@ def _send_quotation_to_customer(qno: str, client: str, amount: float,
                 <tr>
                   <td style="color:#6b7280;padding:4px 16px 4px 0">Total Amount</td>
                   <td><strong>UGX {amount:,.0f}</strong></td>
+                </tr>
+                <tr>
+                  <td style="color:#6b7280;padding:4px 16px 4px 0">Status</td>
+                  <td><strong>{status}</strong></td>
                 </tr>
               </table>
             </div>
@@ -261,7 +280,6 @@ def _send_quotation_to_customer(qno: str, client: str, amount: float,
 
         msg.attach(MIMEText(html_body, "html"))
 
-        # Attach PDF
         part = MIMEBase("application", "pdf")
         part.set_payload(pdf_bytes)
         encoders.encode_base64(part)
@@ -276,15 +294,19 @@ def _send_quotation_to_customer(qno: str, client: str, amount: float,
         pass
 
 
-def notify_quotation_status(record: dict, new_status: str):
-    """Dedicated notification for status-only changes."""
-    q      = record
-    qid    = q.get("id", "")
-    qno    = q.get("quotation_no", "—")
-    client = q.get("customer_name", "—")
-    amount = q.get("total_amount") or 0
-    emoji  = _QUOT_EMOJI.get(new_status, "📋")
-    link   = f"{_APP_URL}/quotations/{qid}"
+def notify_quotation_status(record: dict, new_status: str, pdf_bytes: bytes = None):
+    """Dedicated notification for status-only changes.
+    Always fires group Telegram + team email + DMs to Hillary & Dennis.
+    Also emails customer with PDF when transitioning to Pending or Approved.
+    """
+    q              = record
+    qid            = q.get("id", "")
+    qno            = q.get("quotation_no", "—")
+    client         = q.get("customer_name", "—")
+    amount         = q.get("total_amount") or 0
+    customer_email = (q.get("customer_email") or "").strip()
+    emoji          = _QUOT_EMOJI.get(new_status, "📋")
+    link           = f"{_APP_URL}/quotations/{qid}"
 
     tg = (f"{emoji} *Quotation Status → {new_status}*\n"
           f"*Ref:* {qno}  |  {client}\n"
@@ -294,9 +316,15 @@ def notify_quotation_status(record: dict, new_status: str):
     rows = (_row("Ref", qno) + _row("Client", client) +
             _row("Amount", f"UGX {amount:,.0f}") + _row("New Status", new_status))
 
-    _fire(tg,
-          f"[Rincol ERP] {qno} → {new_status}",
-          _email_wrap(emoji, f"Quotation → {new_status}", rows, link, "View Quotation"))
+    def _go():
+        _send_telegram(tg)
+        _send_email(f"[Rincol ERP] {qno} → {new_status}",
+                    _email_wrap(emoji, f"Quotation → {new_status}", rows, link, "View Quotation"))
+        _dm("hillary", tg)
+        _dm("dennis", tg)
+        if pdf_bytes and customer_email and new_status in ("Pending", "Approved"):
+            _send_quotation_to_customer(qno, client, amount, customer_email, pdf_bytes, new_status)
+    threading.Thread(target=_go, daemon=True).start()
 
 
 # ── Receipts ──────────────────────────────────────────────────────────────────

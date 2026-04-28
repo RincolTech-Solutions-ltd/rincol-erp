@@ -94,6 +94,7 @@ def auth_logout():
 def dashboard():
     stats = {
         "quotations":  query_one("SELECT COUNT(*) AS n FROM quotations")["n"],
+        "draft":       query_one("SELECT COUNT(*) AS n FROM quotations WHERE status='Draft'")["n"],
         "pending":     query_one("SELECT COUNT(*) AS n FROM quotations WHERE status='Pending'")["n"],
         "outstanding": query_one(
             "SELECT COALESCE(SUM(q.total_amount - COALESCE(r.paid,0)),0) AS n "
@@ -173,7 +174,7 @@ def quotations_new():
     if request.method == "POST":
         return _save_quotation(None)
     return render_template("quotation/form.html", q=None, templates=templates, catalog=catalog,
-                           qno=next_quotation_number())
+                           qno=next_quotation_number(), today=date.today().isoformat())
 
 
 @app.route("/quotations/<qid>", methods=["GET"])
@@ -255,7 +256,7 @@ def _save_quotation(qid):
           f.get("title","Quotation"), f["customer_name"], f.get("customer_phone",""),
           f.get("customer_email",""), f.get("customer_address",""),
           f.get("delivery",""), f.get("validity","30 days"), f.get("warranty",""),
-          f.get("payment_terms","Cash / MM / EFT"), f.get("status","Pending"),
+          f.get("payment_terms","Cash / MM / EFT"), f.get("status","Draft"),
           grand, vat_rate, f.get("notes","")))
 
     execute("DELETE FROM quotation_items WHERE quotation_id=%s", (qid,))
@@ -265,9 +266,9 @@ def _save_quotation(qid):
     flash("Quotation saved.", "success")
     saved_q = query_one("SELECT * FROM quotations WHERE id=%s", (qid,))
     if saved_q:
-        # Build PDF bytes for customer email (only on new quotations with a customer email)
+        # Build PDF whenever status is Pending or Approved — customer will receive it
         pdf_bytes = None
-        if _is_new and saved_q.get("customer_email", "").strip():
+        if saved_q.get("status") in ("Pending", "Approved") and saved_q.get("customer_email", "").strip():
             try:
                 saved_items = query("SELECT * FROM quotation_items WHERE quotation_id=%s ORDER BY line_no", (qid,))
                 pdf_bytes   = build_quotation_pdf(dict(saved_q), [dict(i) for i in saved_items],
@@ -301,7 +302,16 @@ def quotations_status(qid):
         flash(f"Status updated to {status}.", "success")
     q_rec = query_one("SELECT * FROM quotations WHERE id=%s", (qid,))
     if q_rec:
-        notify_quotation_status(dict(q_rec), new_status=status)
+        # Build PDF when moving to Pending or Approved — customer gets it
+        pdf_bytes = None
+        if status in ("Pending", "Approved") and (q_rec.get("customer_email") or "").strip():
+            try:
+                q_items   = query("SELECT * FROM quotation_items WHERE quotation_id=%s ORDER BY line_no", (qid,))
+                pdf_bytes = build_quotation_pdf(dict(q_rec), [dict(i) for i in q_items],
+                                                sig_bytes=_load_default_sig())
+            except Exception:
+                pdf_bytes = None
+        notify_quotation_status(dict(q_rec), new_status=status, pdf_bytes=pdf_bytes)
     return redirect(url_for("quotations_view", qid=qid))
 
 

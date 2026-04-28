@@ -25,6 +25,11 @@
         </div>
         <i class="bi bi-hourglass-split stat-icon" style="color:#fbbf24"></i>
       </div>
+      {% if stats.draft %}
+      <div class="mt-2" style="font-size:0.75rem;color:#a5adcb">
+        <i class="bi bi-pencil-square me-1"></i>{{ stats.draft }} draft{{ 's' if stats.draft != 1 else '' }} awaiting review
+      </div>
+      {% endif %}
     </div>
   </div>
   <div class="col-6 col-lg-3">
@@ -151,7 +156,7 @@
             <td class="money small">{{ '{:,.0f}'.format(r.total_amount or 0) }}</td>
             <td>
               {% set s = r.status %}
-              <span class="badge {% if s=='Pending' %}badge-pending{% elif s=='Approved' %}badge-approved{% elif s=='In Progress' %}badge-in-progress{% elif s=='Completed' %}badge-completed{% else %}badge-cancelled{% endif %}">{{ s }}</span>
+              <span class="badge {% if s=='Draft' %}badge-draft{% elif s=='Pending' %}badge-pending{% elif s=='Approved' %}badge-approved{% elif s=='In Progress' %}badge-in-progress{% elif s=='Completed' %}badge-completed{% else %}badge-cancelled{% endif %}">{{ s }}</span>
             </td>
             <td class="text-muted small">{{ r.date }}</td>
           </tr>

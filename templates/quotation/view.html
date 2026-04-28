@@ -28,7 +28,7 @@
     {# Status changer #}
     <form method="post" action="{{ url_for('quotations_status', qid=q.id) }}" class="d-flex gap-1">
       <select name="status" class="form-select form-select-sm" style="width:auto">
-        {% for s in ['Pending','Approved','In Progress','Completed','Cancelled'] %}
+        {% for s in ['Draft','Pending','Approved','In Progress','Completed','Cancelled'] %}
         <option value="{{ s }}" {% if q.status==s %}selected{% endif %}>{{ s }}</option>
         {% endfor %}
       </select>
