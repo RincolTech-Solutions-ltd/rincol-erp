@@ -213,12 +213,23 @@
     if(nameEl  && !nameEl.value)  nameEl.value  = opt.dataset.customer || '';
     if(phoneEl && !phoneEl.value) phoneEl.value = opt.dataset.phone    || '';
     if(emailEl && !emailEl.value) emailEl.value = opt.dataset.email    || '';
-    if(beingFor && !beingFor.value) beingFor.value = bFor;
     amtFig.value  = amount.toLocaleString('en-US');
     prevVal.value = prevPaid;
     prevDisp.textContent = fmt(prevPaid);
     recalc();
-    amtFig.dispatchEvent(new Event('input')); // trigger global money formatter
+    amtFig.dispatchEvent(new Event('input'));
+
+    // Auto-fill "being payment for" — prefer cached value, otherwise fetch from line items
+    if(beingFor){
+      if(bFor){
+        beingFor.value = bFor;
+      } else {
+        fetch(`/api/quotation/${opt.value}/being-for`)
+          .then(r => r.json())
+          .then(data => { if(data.being_for && !beingFor.value) beingFor.value = data.being_for; })
+          .catch(() => {});
+      }
+    }
   }
 
   if(qSel)    qSel.addEventListener('change', onQuotationChange);

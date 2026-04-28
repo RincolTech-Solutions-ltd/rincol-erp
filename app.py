@@ -1285,6 +1285,59 @@ def tasks_delete(tid):
 
 
 # ── API: template items ────────────────────────────────────────────────────────
+@app.route("/api/quotation/<qid>/being-for")
+@login_required
+def api_quotation_being_for(qid):
+    """Return a suggested 'being payment for' string built from the quotation title + line items."""
+    q     = query_one("SELECT title FROM quotations WHERE id=%s", (qid,))
+    items = query("SELECT description, qty, uom FROM quotation_items WHERE quotation_id=%s AND description<>'' ORDER BY line_no", (qid,))
+    if not q:
+        return jsonify({"being_for": ""})
+
+    title = (q.get("title") or "").strip()
+    # Use title only if it's not the generic default
+    title_part = title if title and title.lower() not in ("quotation", "quote", "") else ""
+
+    # Keyword groups — first match per group wins
+    _KW = [
+        ("inverter",        ["inverter", "ups ", "u.p.s"]),
+        ("battery",         ["battery", "batteries", "lithium", "lifepo4", "gel battery", "agm"]),
+        ("solar panel",     ["solar panel", "pv module", "pv panel", "solar module", " panel"]),
+        ("charge controller",["charge controller", "mppt", "pwm controller"]),
+        ("transfer switch", ["transfer switch", "ats", "changeover"]),
+    ]
+
+    found = {}
+    for row in (items or []):
+        desc_lower = (row["description"] or "").lower()
+        qty  = row.get("qty") or 1
+        qty_str = f"{qty:g}" if qty != 1 else ""
+        for group, keywords in _KW:
+            if group in found:
+                continue
+            if any(kw in desc_lower for kw in keywords):
+                # Take the raw description, trim to first 60 chars
+                short = row["description"].strip()
+                if len(short) > 60:
+                    short = short[:57].rstrip() + "…"
+                found[group] = f"{qty_str}{'× ' if qty_str else ''}{short}"
+
+    # Build specs string from found components (inverter + battery are primary)
+    priority = ["inverter", "battery", "solar panel", "charge controller", "transfer switch"]
+    spec_parts = [found[k] for k in priority if k in found]
+
+    if title_part and spec_parts:
+        being_for = f"Supply and installation of {title_part} — {', '.join(spec_parts)}"
+    elif title_part:
+        being_for = f"Supply and installation of {title_part}"
+    elif spec_parts:
+        being_for = f"Supply and installation of {', '.join(spec_parts)}"
+    else:
+        being_for = ""
+
+    return jsonify({"being_for": being_for})
+
+
 @app.route("/api/template/<tid>")
 @login_required
 def api_template(tid):
