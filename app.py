@@ -455,7 +455,21 @@ def receipts_new():
         flash("Receipt saved.", "success")
         new_r = query_one("SELECT * FROM receipts WHERE id=%s", (rid,))
         if new_r:
-            notify_receipt(dict(new_r))
+            r_dict         = dict(new_r)
+            customer_email = (r_dict.get("customer_email") or "").strip()
+            customer_name  = (r_dict.get("customer_name") or "").strip()
+            pdf_bytes      = None
+            if customer_email:
+                try:
+                    pdf_bytes = build_receipt_pdf(r_dict, sig_issued_bytes=_load_default_sig())
+                except Exception:
+                    pdf_bytes = None
+            notify_receipt(r_dict, pdf_bytes=pdf_bytes)
+            if customer_email:
+                if pdf_bytes:
+                    flash(f"📎 Receipt PDF sent to {customer_name} &lt;{customer_email}&gt;.", "info")
+                else:
+                    flash(f"⚠️ PDF generation failed — receipt was NOT emailed to {customer_name} ({customer_email}).", "warning")
         return redirect(url_for("receipts_view", rid=rid))
 
     # Auto-generate next receipt number for pre-fill
@@ -521,6 +535,23 @@ def receipts_edit(rid):
              f.get("collected_by","Hillary"), qid,
              f.get("payment_method","Cash"), rid))
         flash("Receipt updated.", "success")
+        updated_r = query_one("SELECT * FROM receipts WHERE id=%s", (rid,))
+        if updated_r:
+            r_dict         = dict(updated_r)
+            customer_email = (r_dict.get("customer_email") or "").strip()
+            customer_name  = (r_dict.get("customer_name") or "").strip()
+            pdf_bytes      = None
+            if customer_email:
+                try:
+                    pdf_bytes = build_receipt_pdf(r_dict, sig_issued_bytes=_load_default_sig())
+                except Exception:
+                    pdf_bytes = None
+            notify_receipt(r_dict, pdf_bytes=pdf_bytes)
+            if customer_email:
+                if pdf_bytes:
+                    flash(f"📎 Receipt PDF sent to {customer_name} &lt;{customer_email}&gt;.", "info")
+                else:
+                    flash(f"⚠️ PDF generation failed — receipt was NOT emailed to {customer_name} ({customer_email}).", "warning")
         return redirect(url_for("receipts_view", rid=rid))
     quotations = query("SELECT id, quotation_no, customer_name, customer_phone, total_amount FROM quotations ORDER BY date DESC LIMIT 100")
     return render_template("receipt/form.html", r=r, quotations=quotations, prefill_qid=None)

@@ -329,16 +329,17 @@ def notify_quotation_status(record: dict, new_status: str, pdf_bytes: bytes = No
 
 # ── Receipts ──────────────────────────────────────────────────────────────────
 
-def notify_receipt(record: dict):
-    r       = record
-    rid     = r.get("id", "")
-    rno     = r.get("receipt_no", "—")
-    client  = r.get("customer_name", "—")
-    phone   = r.get("customer_phone") or "—"
-    paid    = r.get("amount_paid") or 0
-    balance = r.get("balance") or 0
-    method  = r.get("payment_method") or "Cash"
-    link    = f"{_APP_URL}/receipts/{rid}"
+def notify_receipt(record: dict, pdf_bytes: bytes = None):
+    r              = record
+    rid            = r.get("id", "")
+    rno            = r.get("receipt_no", "—")
+    client         = r.get("customer_name", "—")
+    phone          = r.get("customer_phone") or "—"
+    paid           = r.get("amount_paid") or 0
+    balance        = r.get("balance") or 0
+    method         = r.get("payment_method") or "Cash"
+    customer_email = (r.get("customer_email") or "").strip()
+    link           = f"{_APP_URL}/receipts/{rid}"
 
     bal_note = "SETTLED ✅" if balance <= 0 else f"UGX {balance:,.0f} still owed"
 
@@ -354,9 +355,91 @@ def notify_receipt(record: dict):
             _row("Phone", phone) + _row("Amount Paid", f"UGX {paid:,.0f}") +
             _row("Balance", bal_note) + _row("Method", method))
 
-    _fire(tg,
-          f"[Rincol ERP] 💰 Payment — {client} — UGX {paid:,.0f}",
-          _email_wrap("💰", "Payment Received", rows, link, "View Receipt"))
+    def _go():
+        _send_telegram(tg)
+        _send_email(f"[Rincol ERP] 💰 Payment — {client} — UGX {paid:,.0f}",
+                    _email_wrap("💰", "Payment Received", rows, link, "View Receipt"))
+        if pdf_bytes and customer_email:
+            _send_receipt_to_customer(rno, client, paid, balance, method, customer_email, pdf_bytes)
+    threading.Thread(target=_go, daemon=True).start()
+
+
+def _send_receipt_to_customer(rno: str, client: str, paid: float, balance: float,
+                               method: str, customer_email: str, pdf_bytes: bytes):
+    """Send a payment confirmation email to the customer with the receipt PDF attached."""
+    if not _GM_USER or not _GM_PASS:
+        return
+    try:
+        from email.mime.base import MIMEBase
+        from email import encoders
+
+        bal_note = "Fully settled — thank you!" if balance <= 0 else f"UGX {balance:,.0f} outstanding"
+
+        msg = MIMEMultipart("mixed")
+        msg["Subject"] = f"Payment Receipt {rno} — Rincol Tech Solutions Ltd"
+        msg["From"]    = f"Rincol Tech Solutions <{_GM_USER}>"
+        msg["To"]      = customer_email
+
+        html_body = f"""
+        <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto">
+          <div style="background:#1a1d2e;padding:24px 28px;border-radius:8px 8px 0 0;text-align:center">
+            <div style="color:#89b4fa;font-size:20px;font-weight:bold">Rincol Tech Solutions Ltd</div>
+            <div style="color:#6b7280;font-size:12px;margin-top:4px">Solar & Energy Solutions</div>
+          </div>
+          <div style="border:1px solid #e5e7eb;border-top:none;padding:28px;border-radius:0 0 8px 8px">
+            <p style="margin:0 0 16px">Dear <strong>{client}</strong>,</p>
+            <p style="margin:0 0 16px;color:#374151">
+              Thank you for your payment. Please find your official receipt attached.
+            </p>
+            <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:16px;margin:20px 0">
+              <table style="border-collapse:collapse;width:100%">
+                <tr>
+                  <td style="color:#6b7280;padding:4px 16px 4px 0">Receipt Ref</td>
+                  <td><strong>{rno}</strong></td>
+                </tr>
+                <tr>
+                  <td style="color:#6b7280;padding:4px 16px 4px 0">Amount Paid</td>
+                  <td><strong>UGX {paid:,.0f}</strong></td>
+                </tr>
+                <tr>
+                  <td style="color:#6b7280;padding:4px 16px 4px 0">Payment Method</td>
+                  <td><strong>{method}</strong></td>
+                </tr>
+                <tr>
+                  <td style="color:#6b7280;padding:4px 16px 4px 0">Balance</td>
+                  <td><strong>{bal_note}</strong></td>
+                </tr>
+              </table>
+            </div>
+            <p style="margin:0 0 16px;color:#374151">
+              If you have any questions regarding this receipt, please don't hesitate to reach out.
+            </p>
+            <p style="margin:0;color:#374151">
+              Best regards,<br>
+              <strong>Rincol Tech Solutions Ltd</strong><br>
+              <span style="color:#6b7280;font-size:12px">
+                Tel: +256 775 102 684 | +256 701 586 001<br>
+                Email: rincoltech@gmail.com<br>
+                www.rincoltech.com
+              </span>
+            </p>
+          </div>
+        </div>"""
+
+        msg.attach(MIMEText(html_body, "html"))
+
+        part = MIMEBase("application", "pdf")
+        part.set_payload(pdf_bytes)
+        encoders.encode_base64(part)
+        part.add_header("Content-Disposition", f'attachment; filename="{rno}.pdf"')
+        msg.attach(part)
+
+        with smtplib.SMTP("smtp.gmail.com", 587) as s:
+            s.starttls()
+            s.login(_GM_USER, _GM_PASS)
+            s.sendmail(_GM_USER, [customer_email], msg.as_string())
+    except Exception:
+        pass
 
 
 # ── Tasks ─────────────────────────────────────────────────────────────────────
