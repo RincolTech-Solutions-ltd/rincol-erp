@@ -179,18 +179,18 @@ window.CATALOG_ITEMS = {{ catalog | tojson }};
                 <tr draggable="true">
                   <td class="drag-handle">⠿</td>
                   <td class="col-no td-no">{{ it.line_no }}</td>
-                  <td><input type="text" name="desc[]" class="col-desc" value="{{ it.description }}"></td>
-                  <td>
+                  <td class="td-desc"><input type="text" name="desc[]" class="col-desc" value="{{ it.description }}"></td>
+                  <td class="td-uom">
                     <select name="uom[]" class="col-uom">
                       {% for u in ['pc','lot','job','m','roll','set','pair','box'] %}
                       <option value="{{ u }}" {% if it.uom==u %}selected{% endif %}>{{ u }}</option>
                       {% endfor %}
                     </select>
                   </td>
-                  <td><input type="number" name="qty[]" class="col-qty" value="{{ it.qty }}" min="0.01" step="any"></td>
-                  <td><input type="number" name="price[]" class="col-price" value="{{ it.unit_price }}" min="0" step="any"></td>
+                  <td class="td-qty"><input type="number" name="qty[]" class="col-qty" value="{{ it.qty }}" min="0.01" step="any"></td>
+                  <td class="td-price"><input type="number" name="price[]" class="col-price" value="{{ it.unit_price }}" min="0" step="any"></td>
                   <td class="col-total td-total" data-value="{{ it.total }}">{{ '{:,.0f}'.format(it.total) }}</td>
-                  <td class="text-center">
+                  <td class="td-delete text-center">
                     <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1 remove-row-btn"><i class="bi bi-x"></i></button>
                   </td>
                 </tr>
@@ -201,18 +201,18 @@ window.CATALOG_ITEMS = {{ catalog | tojson }};
                 <tr draggable="true">
                   <td class="drag-handle">⠿</td>
                   <td class="col-no td-no">{{ loop.index }}</td>
-                  <td><input type="text" name="desc[]" class="col-desc" value=""></td>
-                  <td>
+                  <td class="td-desc"><input type="text" name="desc[]" class="col-desc" value=""></td>
+                  <td class="td-uom">
                     <select name="uom[]" class="col-uom">
                       {% for u in ['pc','lot','job','m','roll','set','pair','box'] %}
                       <option value="{{ u }}">{{ u }}</option>
                       {% endfor %}
                     </select>
                   </td>
-                  <td><input type="number" name="qty[]" class="col-qty" value="1" min="0.01" step="any"></td>
-                  <td><input type="number" name="price[]" class="col-price" value="0" min="0" step="any"></td>
+                  <td class="td-qty"><input type="number" name="qty[]" class="col-qty" value="1" min="0.01" step="any"></td>
+                  <td class="td-price"><input type="number" name="price[]" class="col-price" value="0" min="0" step="any"></td>
                   <td class="col-total td-total" data-value="0">0</td>
-                  <td class="text-center">
+                  <td class="td-delete text-center">
                     <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1 remove-row-btn"><i class="bi bi-x"></i></button>
                   </td>
                 </tr>

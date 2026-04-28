@@ -235,11 +235,72 @@ tr.dragging { opacity: 0.35; }
   /* Content padding */
   .content-body { padding: 1rem !important; }
 
-  /* Tables scroll horizontally */
-  .table-responsive-resizable { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  /* Tables scroll horizontally (non-line-items tables only) */
+  .table-responsive-resizable { overflow-x: visible; }
 
-  /* Quotation line items — reduce font size */
-  #line-items-table th, #line-items-table td { font-size: .75rem; padding: 4px 5px; }
+  /* ── Quotation line items: card-per-row layout on mobile ── */
+  #line-items-table,
+  #line-items-table tbody { display: block; }
+
+  #line-items-table colgroup,
+  #line-items-table thead { display: none; }
+
+  /* Tfoot stays as table so colspan works */
+  #line-items-table tfoot { display: table; width: 100%; border-collapse: collapse; }
+  #line-items-table tfoot tr { display: table-row; }
+  #line-items-table tfoot td { display: table-cell; padding: 6px 8px; font-size: .8rem; }
+
+  /* Each item row becomes a card */
+  #line-items-table tbody tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid #2a2d45;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    padding: 8px;
+    background: rgba(26,29,46,0.6);
+  }
+
+  /* Hide drag handle and line number — not useful on touch */
+  #line-items-table .drag-handle,
+  #line-items-table .td-no { display: none; }
+
+  /* Description: full width, prominent */
+  #line-items-table .td-desc {
+    flex: 0 0 100%;
+    padding: 0;
+  }
+  #line-items-table .td-desc input {
+    font-size: 0.95rem;
+    padding: 8px 10px;
+    height: auto;
+  }
+
+  /* UOM, Qty, Price in a flex row */
+  #line-items-table .td-uom { flex: 0 0 68px; padding: 0; }
+  #line-items-table .td-qty { flex: 0 0 64px; padding: 0; }
+  #line-items-table .td-price { flex: 1 1 100px; padding: 0; }
+
+  /* Total — right-aligned, fills remaining space */
+  #line-items-table .td-total {
+    flex: 1 1 auto;
+    text-align: right;
+    padding: 0 4px;
+    font-size: 0.85rem;
+    align-self: center;
+  }
+
+  /* Delete button — far right */
+  #line-items-table .td-delete { flex: 0 0 auto; padding: 0; }
+
+  /* Inputs inside the row */
+  #line-items-table tbody td input,
+  #line-items-table tbody td select {
+    font-size: 0.85rem;
+    padding: 5px 6px;
+  }
 }
 
 /* ── Misc ────────────────────────────────────────────────────────────────── */

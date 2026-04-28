@@ -236,12 +236,12 @@ function initColResize(tableId) {
     tr.innerHTML = `
       <td class="drag-handle" title="Drag to reorder">⠿</td>
       <td class="col-no td-no">${rowIndex + 1}</td>
-      <td><input type="text" name="desc[]" class="col-desc" value="${escHtml(data.description||data.desc||'')}"></td>
-      <td><select name="uom[]" class="col-uom">${uomOptions}</select></td>
-      <td><input type="number" name="qty[]" class="col-qty" value="${data.qty||1}" min="0.01" step="any"></td>
-      <td><input type="number" name="price[]" class="col-price" value="${data.unit_price||data.price||0}" min="0" step="any"></td>
+      <td class="td-desc"><input type="text" name="desc[]" class="col-desc" value="${escHtml(data.description||data.desc||'')}"></td>
+      <td class="td-uom"><select name="uom[]" class="col-uom">${uomOptions}</select></td>
+      <td class="td-qty"><input type="number" name="qty[]" class="col-qty" value="${data.qty||1}" min="0.01" step="any"></td>
+      <td class="td-price"><input type="number" name="price[]" class="col-price" value="${data.unit_price||data.price||0}" min="0" step="any"></td>
       <td class="col-total td-total" data-value="${(data.qty||1)*(data.unit_price||0)}">${fmt((data.qty||1)*(data.unit_price||0))}</td>
-      <td class="text-center">
+      <td class="td-delete text-center">
         <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1 remove-row-btn" title="Remove">
           <i class="bi bi-x"></i>
         </button>
