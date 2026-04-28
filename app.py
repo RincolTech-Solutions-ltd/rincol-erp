@@ -268,13 +268,19 @@ def _save_quotation(qid):
     if saved_q:
         # Build PDF whenever status is Pending or Approved — customer will receive it
         pdf_bytes = None
-        if saved_q.get("status") in ("Pending", "Approved") and saved_q.get("customer_email", "").strip():
+        customer_email = (saved_q.get("customer_email") or "").strip()
+        if saved_q.get("status") in ("Pending", "Approved") and customer_email:
             try:
                 saved_items = query("SELECT * FROM quotation_items WHERE quotation_id=%s ORDER BY line_no", (qid,))
                 pdf_bytes   = build_quotation_pdf(dict(saved_q), [dict(i) for i in saved_items],
                                                   sig_bytes=_load_default_sig())
             except Exception:
                 pdf_bytes = None
+            customer_name = (saved_q.get("customer_name") or "").strip()
+            if pdf_bytes:
+                flash(f"📎 Quotation PDF sent to {customer_name} &lt;{customer_email}&gt;.", "info")
+            else:
+                flash(f"⚠️ PDF generation failed — quotation was NOT emailed to {customer_name} ({customer_email}).", "warning")
         notify_quotation(dict(saved_q), action="created" if _is_new else "updated",
                          pdf_bytes=pdf_bytes)
     return redirect(url_for("quotations_view", qid=qid))
@@ -304,13 +310,19 @@ def quotations_status(qid):
     if q_rec:
         # Build PDF when moving to Pending or Approved — customer gets it
         pdf_bytes = None
-        if status in ("Pending", "Approved") and (q_rec.get("customer_email") or "").strip():
+        customer_email = (q_rec.get("customer_email") or "").strip()
+        if status in ("Pending", "Approved") and customer_email:
             try:
                 q_items   = query("SELECT * FROM quotation_items WHERE quotation_id=%s ORDER BY line_no", (qid,))
                 pdf_bytes = build_quotation_pdf(dict(q_rec), [dict(i) for i in q_items],
                                                 sig_bytes=_load_default_sig())
             except Exception:
                 pdf_bytes = None
+            customer_name = (q_rec.get("customer_name") or "").strip()
+            if pdf_bytes:
+                flash(f"📎 Quotation PDF sent to {customer_name} &lt;{customer_email}&gt;.", "info")
+            else:
+                flash(f"⚠️ PDF generation failed — quotation was NOT emailed to {customer_name} ({customer_email}).", "warning")
         notify_quotation_status(dict(q_rec), new_status=status, pdf_bytes=pdf_bytes)
     return redirect(url_for("quotations_view", qid=qid))
 
