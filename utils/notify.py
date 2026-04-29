@@ -24,28 +24,35 @@ _PERSONAL_IDS = {
 
 # ── Low-level senders ─────────────────────────────────────────────────────────
 
-def _send_telegram(text: str):
+def _send_telegram(text: str, keyboard=None):
+    """Send to the group channel. keyboard = inline_keyboard list (optional)."""
     if not _TG_TOKEN or not _TG_CHAT:
         return
+    payload = {"chat_id": _TG_CHAT, "text": text, "parse_mode": "Markdown"}
+    if keyboard:
+        payload["reply_markup"] = {"inline_keyboard": keyboard}
     try:
         requests.post(
             f"https://api.telegram.org/bot{_TG_TOKEN}/sendMessage",
-            json={"chat_id": _TG_CHAT, "text": text, "parse_mode": "Markdown"},
+            json=payload,
             timeout=8,
         )
     except Exception:
         pass
 
 
-def _dm(person: str, text: str):
+def _dm(person: str, text: str, keyboard=None):
     """Send a direct Telegram message to a team member by name (case-insensitive)."""
     chat_id = _PERSONAL_IDS.get((person or "").strip().lower(), "")
     if not _TG_TOKEN or not chat_id:
         return
+    payload = {"chat_id": chat_id, "text": text, "parse_mode": "Markdown"}
+    if keyboard:
+        payload["reply_markup"] = {"inline_keyboard": keyboard}
     try:
         requests.post(
             f"https://api.telegram.org/bot{_TG_TOKEN}/sendMessage",
-            json={"chat_id": chat_id, "text": text, "parse_mode": "Markdown"},
+            json=payload,
             timeout=8,
         )
     except Exception:
@@ -117,6 +124,39 @@ _QUOT_EMOJI = {
 _TASK_PRIORITY_EMOJI = {"Urgent": "🚨", "High": "🔴", "Normal": "🟡", "Low": "⚪"}
 
 
+# ── Inline keyboards for DM notifications ─────────────────────────────────────
+# Built here (not imported from tg_bot) to avoid circular imports.
+
+def _task_kbd(tid):
+    return [
+        [{"text": "✅ Done",    "callback_data": f"task:done:{tid}"},
+         {"text": "🔄 Status", "callback_data": f"task:status:{tid}"}],
+        [{"text": "📝 Note",   "callback_data": f"task:note:{tid}"},
+         {"text": "🗑 Delete", "callback_data": f"task:delete:{tid}"}],
+        [{"text": "🔗 Open",   "url": f"{_APP_URL}/tasks/{tid}"}],
+    ]
+
+
+def _quot_kbd(qid):
+    return [
+        [{"text": "👍 Approve", "callback_data": f"quot:setstatus:{qid}:Approved"},
+         {"text": "🔄 Status", "callback_data": f"quot:status:{qid}"}],
+        [{"text": "💰 Payment", "callback_data": f"quot:payment:{qid}"},
+         {"text": "📝 Note",    "callback_data": f"quot:note:{qid}"}],
+        [{"text": "🔗 Open",    "url": f"{_APP_URL}/quotations/{qid}"}],
+    ]
+
+
+def _maint_kbd(mid):
+    return [
+        [{"text": "🔧 In Progress", "callback_data": f"maint:setstatus:{mid}:In Progress"},
+         {"text": "✅ Resolved",    "callback_data": f"maint:setstatus:{mid}:Resolved"}],
+        [{"text": "🔄 Status",      "callback_data": f"maint:status:{mid}"},
+         {"text": "📝 Note",        "callback_data": f"maint:note:{mid}"}],
+        [{"text": "🔗 Open",        "url": f"{_APP_URL}/maintenance/{mid}"}],
+    ]
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # PUBLIC NOTIFY FUNCTIONS
 # ══════════════════════════════════════════════════════════════════════════════
@@ -159,12 +199,13 @@ def notify_maintenance(record: dict, action: str = "updated"):
     executor = (r.get("executor_name") or "").strip()
 
     def _go():
-        _send_telegram(tg)
+        kbd = _maint_kbd(mid)
+        _send_telegram(tg, keyboard=kbd)
         _send_email(f"[Rincol ERP] Maintenance {action}: {client} — {status}",
                     _email_wrap(emoji, f"Maintenance {action.title()}", rows, link))
         # DM the assigned executor if they're a known team member
         if executor:
-            _dm(executor, tg)
+            _dm(executor, tg, keyboard=kbd)
     threading.Thread(target=_go, daemon=True).start()
 
 
@@ -199,11 +240,12 @@ def notify_quotation(record: dict, action: str = "created", pdf_bytes: bytes = N
             _row("Status", status))
 
     def _go():
-        _send_telegram(tg)
+        kbd = _quot_kbd(qid)
+        _send_telegram(tg, keyboard=kbd)
         _send_email(f"[Rincol ERP] Quotation {action}: {qno} — {client}",
                     _email_wrap(emoji, f"Quotation {action.title()}", rows, link, "View Quotation"))
-        _dm("hillary", tg)
-        _dm("dennis", tg)
+        _dm("hillary", tg, keyboard=kbd)
+        _dm("dennis", tg, keyboard=kbd)
         # Customer email only when quotation is being shared (Pending) or confirmed (Approved)
         if pdf_bytes and customer_email and status in ("Pending", "Approved"):
             _send_quotation_to_customer(qno, client, amount, customer_email, pdf_bytes, status)
@@ -317,11 +359,12 @@ def notify_quotation_status(record: dict, new_status: str, pdf_bytes: bytes = No
             _row("Amount", f"UGX {amount:,.0f}") + _row("New Status", new_status))
 
     def _go():
-        _send_telegram(tg)
+        kbd = _quot_kbd(qid)
+        _send_telegram(tg, keyboard=kbd)
         _send_email(f"[Rincol ERP] {qno} → {new_status}",
                     _email_wrap(emoji, f"Quotation → {new_status}", rows, link, "View Quotation"))
-        _dm("hillary", tg)
-        _dm("dennis", tg)
+        _dm("hillary", tg, keyboard=kbd)
+        _dm("dennis", tg, keyboard=kbd)
         if pdf_bytes and customer_email and new_status in ("Pending", "Approved"):
             _send_quotation_to_customer(qno, client, amount, customer_email, pdf_bytes, new_status)
     threading.Thread(target=_go, daemon=True).start()
@@ -474,12 +517,13 @@ def notify_task(record: dict, action: str = "created"):
         rows += _row("Notes", notes)
 
     def _go():
-        _send_telegram(tg)
+        kbd = _task_kbd(tid)
+        _send_telegram(tg, keyboard=kbd)
         _send_email(f"[Rincol ERP] Task {action}: {title}",
                     _email_wrap(emoji, f"Task {action.title()}", rows, link, "View Task"))
-        # DM the assigned person directly
+        # DM the assigned person directly with action buttons
         if assigned and assigned.lower() != "unassigned":
-            _dm(assigned, tg)
+            _dm(assigned, tg, keyboard=kbd)
     threading.Thread(target=_go, daemon=True).start()
 
 
