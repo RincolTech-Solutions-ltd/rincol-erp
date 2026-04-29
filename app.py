@@ -24,6 +24,7 @@ from utils.pdf import build_quotation_pdf, build_receipt_pdf
 from utils.notify import (notify_maintenance, notify_quotation,
                            notify_quotation_status, notify_receipt,
                            notify_task, notify_settlement, notify_balancing_job)
+from utils.tg_bot import handle_update as _tg_handle_update
 
 
 @app.teardown_appcontext
@@ -1962,6 +1963,31 @@ def solar_bom_edit(sid):
 
     bom = query("SELECT * FROM solar_sizing_bom WHERE sizing_id=%s ORDER BY line_no", (sid,))
     return render_template("solar/bom_edit.html", s=s, bom=bom)
+
+
+# ── Telegram bot ───────────────────────────────────────────────────────────────
+
+@app.route("/telegram/webhook", methods=["POST"])
+def telegram_webhook():
+    """Telegram sends every message/button press here via webhook."""
+    update = request.get_json(force=True, silent=True) or {}
+    _tg_handle_update(update)
+    return "", 200
+
+
+@app.route("/telegram/setup")
+@login_required
+def telegram_setup():
+    """Register the webhook URL with Telegram. Visit once after each deployment."""
+    import requests as _req
+    token   = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+    webhook = f"{os.environ.get('APP_BASE_URL', '')}/telegram/webhook"
+    r = _req.post(
+        f"https://api.telegram.org/bot{token}/setWebhook",
+        json={"url": webhook, "allowed_updates": ["message", "callback_query"]},
+        timeout=10,
+    )
+    return jsonify({"webhook_url": webhook, "telegram_response": r.json()})
 
 
 # ── Run ────────────────────────────────────────────────────────────────────────
