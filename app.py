@@ -344,16 +344,28 @@ def _maybe_create_approval_task(qid: str, q_rec: dict):
              f"Amount: UGX {amount:,.0f}\n\n"
              f"{system_desc}")
 
+    # Assign task to executor(s) — fall back to Both if none set yet
+    exec_rows  = query("SELECT executor_name FROM job_executions WHERE quotation_id=%s", (qid,))
+    exec_names = [r["executor_name"] for r in exec_rows if (r.get("executor_name") or "").strip()]
+
+    if len(exec_names) == 1:
+        assigned_to = exec_names[0]
+    elif len(exec_names) > 1:
+        assigned_to = "Both"
+    else:
+        assigned_to = "Both"
+        notes += "\n\n⚠️ Executor not yet assigned — please set one on this quotation."
+
     execute(
         "INSERT INTO tasks (title, description, due_date, priority, status, assigned_to, linked_quotation_id, notes) "
         "VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
         (f"Execute: {qno} — {client}", system_desc,
-         None, "High", "Pending", "Dennis", qid, notes))
+         None, "High", "Pending", assigned_to, qid, notes))
 
     new_t = query_one("SELECT * FROM tasks ORDER BY id DESC LIMIT 1")
     if new_t:
         notify_task(dict(new_t), action="created")
-    flash(f'✅ Task created for <strong>{qno}</strong> — assigned to Dennis.', "info")
+    flash(f'✅ Task created for <strong>{qno}</strong> — assigned to {assigned_to}.', "info")
 
 
 @app.route("/quotations/<qid>/pdf")
@@ -422,30 +434,31 @@ def payments_delete(pid):
 @app.route("/quotations/<qid>/executions/add", methods=["POST"])
 @login_required
 def executions_add(qid):
-    # One execution record per job — upsert on quotation_id
-    existing = query_one("SELECT id FROM job_executions WHERE quotation_id=%s LIMIT 1", (qid,))
-    if existing:
-        execute(
-            "UPDATE job_executions SET executor_name=%s, executor_payment=%s, "
-            "execution_date=%s, notes=%s WHERE id=%s",
-            (request.form["executor_name"],
-             float(request.form.get("executor_payment", 0)),
-             request.form.get("execution_date") or None,
-             request.form.get("notes", ""),
-             existing["id"])
-        )
-        flash("Execution record updated.", "success")
-    else:
-        execute(
-            "INSERT INTO job_executions (quotation_id, executor_name, executor_payment, execution_date, notes) "
-            "VALUES (%s,%s,%s,%s,%s)",
-            (qid, request.form["executor_name"],
-             float(request.form.get("executor_payment", 0)),
-             request.form.get("execution_date") or None,
-             request.form.get("notes", ""))
-        )
-        flash("Execution record saved.", "success")
+    name = (request.form.get("executor_name") or "").strip()
+    if not name:
+        flash("Executor name is required.", "warning")
+        return redirect(url_for("quotations_view", qid=qid))
+    execute(
+        "INSERT INTO job_executions (quotation_id, executor_name, executor_payment, execution_date, notes) "
+        "VALUES (%s,%s,%s,%s,%s)",
+        (qid, name,
+         float(request.form.get("executor_payment", 0) or 0),
+         request.form.get("execution_date") or None,
+         request.form.get("notes", ""))
+    )
+    flash(f"Executor {name} added.", "success")
     return redirect(url_for("quotations_view", qid=qid))
+
+
+@app.route("/quotations/executions/<eid>/delete", methods=["POST"])
+@login_required
+def executions_delete(eid):
+    row = query_one("SELECT quotation_id FROM job_executions WHERE id=%s", (eid,))
+    if row:
+        execute("DELETE FROM job_executions WHERE id=%s", (eid,))
+        flash("Executor removed.", "success")
+        return redirect(url_for("quotations_view", qid=row["quotation_id"]))
+    abort(404)
 
 
 # ── Receipts ──────────────────────────────────────────────────────────────────
@@ -1173,18 +1186,21 @@ def balancing_edit(jid=None):
         if qid:
             q = query_one("SELECT * FROM quotations WHERE id=%s", (qid,))
             if q:
-                exe = query_one(
-                    "SELECT executor_name, executor_payment, execution_date FROM job_executions "
-                    "WHERE quotation_id=%s ORDER BY execution_date DESC NULLS LAST LIMIT 1",
+                execs = query(
+                    "SELECT executor_name, executor_payment FROM job_executions "
+                    "WHERE quotation_id=%s ORDER BY id",
                     (qid,)
                 )
                 prefill_spend = []
-                if exe and exe.get("executor_payment") and float(exe["executor_payment"] or 0) > 0:
-                    prefill_spend.append({
-                        "description": f"{exe['executor_name'] or 'Executor'} labour",
-                        "paid_by": "Dennis",
-                        "amount": float(exe["executor_payment"]),
-                    })
+                for exe in (execs or []):
+                    pay = float(exe.get("executor_payment") or 0)
+                    if pay > 0:
+                        name = (exe.get("executor_name") or "Executor").strip()
+                        prefill_spend.append({
+                            "description": f"{name} labour",
+                            "paid_by": name if name in ("Hillary", "Dennis") else "Dennis",
+                            "amount": pay,
+                        })
                 prefill = {
                     "job_name":            f"{q['customer_name']} — {q['quotation_no']}",
                     "quoted":              q["total_amount"],

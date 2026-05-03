@@ -65,14 +65,44 @@
       </div>
     </div>
 
-    {# Executions — one record per job, editable in place #}
-    {% set exe = execs[0] if execs else None %}
+    {# Executions — multiple rows per job #}
     <div class="card">
       <div class="card-header"><span class="section-header mb-0">Job Execution</span></div>
       <div class="card-body">
+
+        {# Existing executor rows #}
+        {% if execs %}
+        <table class="table table-sm mb-3">
+          <thead><tr>
+            <th>Executor</th><th>Date</th><th>Pay (UGX)</th><th>Notes</th><th></th>
+          </tr></thead>
+          <tbody>
+          {% for exe in execs %}
+          <tr>
+            <td>{{ exe.executor_name or '—' }}</td>
+            <td>{{ exe.execution_date or '—' }}</td>
+            <td>{{ '{:,.0f}'.format(exe.executor_payment or 0) }}</td>
+            <td class="text-muted small">{{ exe.notes or '' }}</td>
+            <td>
+              <form method="post" action="{{ url_for('executions_delete', eid=exe.id) }}"
+                    onsubmit="return confirm('Remove this executor?')">
+                <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-1">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <p class="text-muted small mb-3">No executors added yet.</p>
+        {% endif %}
+
+        {# Add executor form — always inserts a new row #}
         <form method="post" action="{{ url_for('executions_add', qid=q.id) }}" class="row g-2">
           <div class="col-12">
-            <label class="form-label">Executor Name</label>
+            <label class="form-label">Add Executor</label>
             <select id="sel_executor_name" class="form-select form-select-sm"
                     onchange="nameDropdown(this,'inp_executor_name')">
               <option value="">— Select —</option>
@@ -84,27 +114,23 @@
             <input type="text" name="executor_name" id="inp_executor_name"
                    class="form-control form-control-sm mt-1"
                    placeholder="Type new name and save"
-                   style="display:none"
-                   value="{{ exe.executor_name if exe else '' }}">
+                   style="display:none">
           </div>
           <div class="col-6">
             <label class="form-label">Date</label>
-            <input type="date" name="execution_date" class="form-control form-control-sm"
-                   value="{{ exe.execution_date if exe else '' }}">
+            <input type="date" name="execution_date" class="form-control form-control-sm">
           </div>
           <div class="col-6">
             <label class="form-label">Pay (UGX)</label>
-            <input type="number" name="executor_payment" class="form-control form-control-sm" min="0" step="any"
-                   value="{{ exe.executor_payment if exe else 0 }}">
+            <input type="number" name="executor_payment" class="form-control form-control-sm" min="0" step="any" value="0">
           </div>
           <div class="col-12">
             <label class="form-label">Notes</label>
-            <input type="text" name="notes" class="form-control form-control-sm"
-                   value="{{ exe.notes if exe else '' }}">
+            <input type="text" name="notes" class="form-control form-control-sm" placeholder="Optional">
           </div>
           <div class="col-12">
             <button type="submit" class="btn btn-sm btn-outline-secondary w-100">
-              {% if exe %}<i class="bi bi-pencil"></i> Update Execution{% else %}<i class="bi bi-plus"></i> Save Execution{% endif %}
+              <i class="bi bi-plus"></i> Add Executor
             </button>
           </div>
         </form>
