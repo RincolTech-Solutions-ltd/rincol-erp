@@ -137,10 +137,19 @@ def _task_kbd(tid):
     ]
 
 
-def _quot_kbd(qid):
+def _quot_kbd(qid, status: str = "Pending"):
+    _action_btn = {
+        "Draft":       {"text": "👍 Approve",      "callback_data": f"quot:setstatus:{qid}:Approved"},
+        "Pending":     {"text": "👍 Approve",      "callback_data": f"quot:setstatus:{qid}:Approved"},
+        "Approved":    {"text": "▶ In Progress",  "callback_data": f"quot:setstatus:{qid}:In Progress"},
+        "In Progress": {"text": "✅ Complete",     "callback_data": f"quot:setstatus:{qid}:Completed"},
+    }
+    row1 = []
+    if status in _action_btn:
+        row1.append(_action_btn[status])
+    row1.append({"text": "🔄 Status", "callback_data": f"quot:status:{qid}"})
     return [
-        [{"text": "👍 Approve", "callback_data": f"quot:setstatus:{qid}:Approved"},
-         {"text": "🔄 Status", "callback_data": f"quot:status:{qid}"}],
+        row1,
         [{"text": "💰 Payment", "callback_data": f"quot:payment:{qid}"},
          {"text": "📝 Note",    "callback_data": f"quot:note:{qid}"}],
         [{"text": "🔗 Open",    "url": f"{_APP_URL}/quotations/{qid}"}],
@@ -240,7 +249,7 @@ def notify_quotation(record: dict, action: str = "created", pdf_bytes: bytes = N
             _row("Status", status))
 
     def _go():
-        kbd = _quot_kbd(qid)
+        kbd = _quot_kbd(qid, status)
         _send_telegram(tg, keyboard=kbd)
         _send_email(f"[Rincol ERP] Quotation {action}: {qno} — {client}",
                     _email_wrap(emoji, f"Quotation {action.title()}", rows, link, "View Quotation"))
@@ -359,7 +368,7 @@ def notify_quotation_status(record: dict, new_status: str, pdf_bytes: bytes = No
             _row("Amount", f"UGX {amount:,.0f}") + _row("New Status", new_status))
 
     def _go():
-        kbd = _quot_kbd(qid)
+        kbd = _quot_kbd(qid, new_status)
         _send_telegram(tg, keyboard=kbd)
         _send_email(f"[Rincol ERP] {qno} → {new_status}",
                     _email_wrap(emoji, f"Quotation → {new_status}", rows, link, "View Quotation"))
