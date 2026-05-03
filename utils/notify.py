@@ -530,9 +530,13 @@ def notify_task(record: dict, action: str = "created"):
         _send_telegram(tg, keyboard=kbd)
         _send_email(f"[Rincol ERP] Task {action}: {title}",
                     _email_wrap(emoji, f"Task {action.title()}", rows, link, "View Task"))
-        # DM the assigned person directly with action buttons
-        if assigned and assigned.lower() != "unassigned":
-            _dm(assigned, tg, keyboard=kbd)
+        # DM the assigned person(s) directly with action buttons
+        if assigned and assigned.lower() not in ("unassigned", ""):
+            if assigned.lower() == "both":
+                _dm("hillary", tg, keyboard=kbd)
+                _dm("dennis",  tg, keyboard=kbd)
+            else:
+                _dm(assigned, tg, keyboard=kbd)
     threading.Thread(target=_go, daemon=True).start()
 
 
