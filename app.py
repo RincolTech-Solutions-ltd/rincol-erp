@@ -2006,6 +2006,24 @@ def telegram_setup():
     return jsonify({"webhook_url": webhook, "telegram_response": r.json()})
 
 
+@app.route("/admin/test-email")
+@login_required
+def test_email():
+    """Synchronous SMTP test — returns success or the actual error message."""
+    import smtplib
+    gm_user = os.environ.get("GMAIL_USER", "")
+    gm_pass = os.environ.get("GMAIL_APP_PASSWORD", "")
+    notify_to = os.environ.get("NOTIFY_EMAILS", "")
+    try:
+        with smtplib.SMTP("smtp.gmail.com", 587) as s:
+            s.starttls()
+            s.login(gm_user, gm_pass)
+            s.sendmail(gm_user, [gm_user], f"Subject: Rincol ERP SMTP test\n\nSMTP is working.")
+        return jsonify({"status": "ok", "gmail_user": gm_user, "notify_to": notify_to})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e), "gmail_user": gm_user, "notify_to": notify_to})
+
+
 # ── Run ────────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     app.run(debug=True, port=5000)
