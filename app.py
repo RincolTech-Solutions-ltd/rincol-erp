@@ -2008,19 +2008,25 @@ def telegram_setup():
 
 @app.route("/admin/test-email")
 def test_email():
-    """Synchronous SMTP test — returns success or the actual error message."""
-    import smtplib
-    gm_user = os.environ.get("GMAIL_USER", "")
-    gm_pass = os.environ.get("GMAIL_APP_PASSWORD", "")
-    notify_to = os.environ.get("NOTIFY_EMAILS", "")
+    """Resend API test — returns success or the actual error."""
+    import requests as _req
+    key      = os.environ.get("RESEND_API_KEY", "")
+    from_    = os.environ.get("EMAIL_FROM", "onboarding@resend.dev")
+    notify_to = os.environ.get("NOTIFY_EMAILS", "arinda.hillary@gmail.com")
+    to_list  = [e.strip() for e in notify_to.split(",") if e.strip()]
     try:
-        with smtplib.SMTP("smtp.gmail.com", 587) as s:
-            s.starttls()
-            s.login(gm_user, gm_pass)
-            s.sendmail(gm_user, [gm_user], f"Subject: Rincol ERP SMTP test\n\nSMTP is working.")
-        return jsonify({"status": "ok", "gmail_user": gm_user, "notify_to": notify_to})
+        r = _req.post(
+            "https://api.resend.com/emails",
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            json={"from": f"Rincol ERP <{from_}>", "to": to_list,
+                  "subject": "Rincol ERP — email test", "html": "<p>Resend is working.</p>"},
+            timeout=10,
+        )
+        return jsonify({"status": "ok" if r.status_code == 200 else "error",
+                        "resend_status": r.status_code, "resend_body": r.json(),
+                        "from": from_, "to": to_list})
     except Exception as e:
-        return jsonify({"status": "error", "error": str(e), "gmail_user": gm_user, "notify_to": notify_to})
+        return jsonify({"status": "error", "error": str(e)})
 
 
 # ── Run ────────────────────────────────────────────────────────────────────────

@@ -1,19 +1,17 @@
-"""Notification helpers — Telegram + Gmail."""
+"""Notification helpers — Telegram + Resend."""
 import os
-import smtplib
+import base64
 import threading
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 
 import requests
 
 # ── Config ────────────────────────────────────────────────────────────────────
-_TG_TOKEN  = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-_TG_CHAT   = os.environ.get("TELEGRAM_CHAT_ID", "")
-_GM_USER   = os.environ.get("GMAIL_USER", "")
-_GM_PASS   = os.environ.get("GMAIL_APP_PASSWORD", "")
-_NOTIFY_TO = [e.strip() for e in os.environ.get("NOTIFY_EMAILS", "").split(",") if e.strip()]
-_APP_URL   = os.environ.get("APP_BASE_URL", "https://rincol-erp.onrender.com")
+_TG_TOKEN    = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+_TG_CHAT     = os.environ.get("TELEGRAM_CHAT_ID", "")
+_RESEND_KEY  = os.environ.get("RESEND_API_KEY", "")
+_FROM_EMAIL  = os.environ.get("EMAIL_FROM", "onboarding@resend.dev")
+_NOTIFY_TO   = [e.strip() for e in os.environ.get("NOTIFY_EMAILS", "").split(",") if e.strip()]
+_APP_URL     = os.environ.get("APP_BASE_URL", "https://rincol-erp.onrender.com")
 
 # Personal Telegram chat IDs — for DMs to assigned team members
 _PERSONAL_IDS = {
@@ -60,18 +58,16 @@ def _dm(person: str, text: str, keyboard=None):
 
 
 def _send_email(subject: str, html_body: str):
-    if not _GM_USER or not _GM_PASS or not _NOTIFY_TO:
+    if not _RESEND_KEY or not _NOTIFY_TO:
         return
     try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
-        msg["From"]    = f"Rincol ERP <{_GM_USER}>"
-        msg["To"]      = ", ".join(_NOTIFY_TO)
-        msg.attach(MIMEText(html_body, "html"))
-        with smtplib.SMTP("smtp.gmail.com", 587) as s:
-            s.starttls()
-            s.login(_GM_USER, _GM_PASS)
-            s.sendmail(_GM_USER, _NOTIFY_TO, msg.as_string())
+        requests.post(
+            "https://api.resend.com/emails",
+            headers={"Authorization": f"Bearer {_RESEND_KEY}", "Content-Type": "application/json"},
+            json={"from": f"Rincol ERP <{_FROM_EMAIL}>", "to": _NOTIFY_TO,
+                  "subject": subject, "html": html_body},
+            timeout=10,
+        )
     except Exception:
         pass
 
@@ -264,83 +260,55 @@ def notify_quotation(record: dict, action: str = "created", pdf_bytes: bytes = N
 def _send_quotation_to_customer(qno: str, client: str, amount: float,
                                  customer_email: str, pdf_bytes: bytes,
                                  status: str = "Pending"):
-    """Send a professional email to the customer with the quotation PDF attached.
-    status='Pending'  → 'please find attached our quotation for your review'
-    status='Approved' → 'thank you for approving — here is your confirmed quotation'
-    """
-    if not _GM_USER or not _GM_PASS:
+    if not _RESEND_KEY:
         return
+    if status == "Approved":
+        subject    = f"Approved Quotation {qno} — Rincol Tech Solutions Ltd"
+        intro_line = (f"Thank you for approving quotation <strong>{qno}</strong>. "
+                      f"Please find your confirmed quotation attached for your records.")
+    else:
+        subject    = f"Quotation {qno} — Rincol Tech Solutions Ltd"
+        intro_line = (f"Thank you for your interest. Please find attached our quotation "
+                      f"<strong>{qno}</strong> for your review.")
+
+    html_body = f"""
+    <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto">
+      <div style="background:#1a1d2e;padding:24px 28px;border-radius:8px 8px 0 0;text-align:center">
+        <div style="color:#89b4fa;font-size:20px;font-weight:bold">Rincol Tech Solutions Ltd</div>
+        <div style="color:#6b7280;font-size:12px;margin-top:4px">Solar & Energy Solutions</div>
+      </div>
+      <div style="border:1px solid #e5e7eb;border-top:none;padding:28px;border-radius:0 0 8px 8px">
+        <p style="margin:0 0 16px">Dear <strong>{client}</strong>,</p>
+        <p style="margin:0 0 16px;color:#374151">{intro_line}</p>
+        <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:16px;margin:20px 0">
+          <table style="border-collapse:collapse;width:100%">
+            <tr><td style="color:#6b7280;padding:4px 16px 4px 0">Quotation Ref</td><td><strong>{qno}</strong></td></tr>
+            <tr><td style="color:#6b7280;padding:4px 16px 4px 0">Total Amount</td><td><strong>UGX {amount:,.0f}</strong></td></tr>
+            <tr><td style="color:#6b7280;padding:4px 16px 4px 0">Status</td><td><strong>{status}</strong></td></tr>
+          </table>
+        </div>
+        <p style="margin:0 0 16px;color:#374151">If you have any questions or would like to discuss further, please don't hesitate to reach out to us.</p>
+        <p style="margin:0;color:#374151">
+          Best regards,<br><strong>Rincol Tech Solutions Ltd</strong><br>
+          <span style="color:#6b7280;font-size:12px">Tel: +256 775 102 684 | +256 701 586 001<br>Email: rincoltech@gmail.com<br>www.rincoltech.com</span>
+        </p>
+      </div>
+    </div>"""
+
     try:
-        from email.mime.base import MIMEBase
-        from email import encoders
-
-        if status == "Approved":
-            subject    = f"Approved Quotation {qno} — Rincol Tech Solutions Ltd"
-            intro_line = (f"Thank you for approving quotation <strong>{qno}</strong>. "
-                          f"Please find your confirmed quotation attached for your records.")
-        else:
-            subject    = f"Quotation {qno} — Rincol Tech Solutions Ltd"
-            intro_line = (f"Thank you for your interest. Please find attached our quotation "
-                          f"<strong>{qno}</strong> for your review.")
-
-        msg = MIMEMultipart("mixed")
-        msg["Subject"] = subject
-        msg["From"]    = f"Rincol Tech Solutions <{_GM_USER}>"
-        msg["To"]      = customer_email
-
-        html_body = f"""
-        <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto">
-          <div style="background:#1a1d2e;padding:24px 28px;border-radius:8px 8px 0 0;text-align:center">
-            <div style="color:#89b4fa;font-size:20px;font-weight:bold">Rincol Tech Solutions Ltd</div>
-            <div style="color:#6b7280;font-size:12px;margin-top:4px">Solar & Energy Solutions</div>
-          </div>
-          <div style="border:1px solid #e5e7eb;border-top:none;padding:28px;border-radius:0 0 8px 8px">
-            <p style="margin:0 0 16px">Dear <strong>{client}</strong>,</p>
-            <p style="margin:0 0 16px;color:#374151">{intro_line}</p>
-            <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:16px;margin:20px 0">
-              <table style="border-collapse:collapse;width:100%">
-                <tr>
-                  <td style="color:#6b7280;padding:4px 16px 4px 0">Quotation Ref</td>
-                  <td><strong>{qno}</strong></td>
-                </tr>
-                <tr>
-                  <td style="color:#6b7280;padding:4px 16px 4px 0">Total Amount</td>
-                  <td><strong>UGX {amount:,.0f}</strong></td>
-                </tr>
-                <tr>
-                  <td style="color:#6b7280;padding:4px 16px 4px 0">Status</td>
-                  <td><strong>{status}</strong></td>
-                </tr>
-              </table>
-            </div>
-            <p style="margin:0 0 16px;color:#374151">
-              If you have any questions or would like to discuss further, please don't
-              hesitate to reach out to us.
-            </p>
-            <p style="margin:0;color:#374151">
-              Best regards,<br>
-              <strong>Rincol Tech Solutions Ltd</strong><br>
-              <span style="color:#6b7280;font-size:12px">
-                Tel: +256 775 102 684 | +256 701 586 001<br>
-                Email: rincoltech@gmail.com<br>
-                www.rincoltech.com
-              </span>
-            </p>
-          </div>
-        </div>"""
-
-        msg.attach(MIMEText(html_body, "html"))
-
-        part = MIMEBase("application", "pdf")
-        part.set_payload(pdf_bytes)
-        encoders.encode_base64(part)
-        part.add_header("Content-Disposition", f'attachment; filename="{qno}.pdf"')
-        msg.attach(part)
-
-        with smtplib.SMTP("smtp.gmail.com", 587) as s:
-            s.starttls()
-            s.login(_GM_USER, _GM_PASS)
-            s.sendmail(_GM_USER, [customer_email], msg.as_string())
+        requests.post(
+            "https://api.resend.com/emails",
+            headers={"Authorization": f"Bearer {_RESEND_KEY}", "Content-Type": "application/json"},
+            json={
+                "from": f"Rincol Tech Solutions <{_FROM_EMAIL}>",
+                "to": [customer_email],
+                "subject": subject,
+                "html": html_body,
+                "attachments": [{"filename": f"{qno}.pdf",
+                                  "content": base64.b64encode(pdf_bytes).decode()}],
+            },
+            timeout=15,
+        )
     except Exception:
         pass
 
@@ -418,78 +386,49 @@ def notify_receipt(record: dict, pdf_bytes: bytes = None):
 
 def _send_receipt_to_customer(rno: str, client: str, paid: float, balance: float,
                                method: str, customer_email: str, pdf_bytes: bytes):
-    """Send a payment confirmation email to the customer with the receipt PDF attached."""
-    if not _GM_USER or not _GM_PASS:
+    if not _RESEND_KEY:
         return
+    bal_note = "Fully settled — thank you!" if balance <= 0 else f"UGX {balance:,.0f} outstanding"
+
+    html_body = f"""
+    <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto">
+      <div style="background:#1a1d2e;padding:24px 28px;border-radius:8px 8px 0 0;text-align:center">
+        <div style="color:#89b4fa;font-size:20px;font-weight:bold">Rincol Tech Solutions Ltd</div>
+        <div style="color:#6b7280;font-size:12px;margin-top:4px">Solar & Energy Solutions</div>
+      </div>
+      <div style="border:1px solid #e5e7eb;border-top:none;padding:28px;border-radius:0 0 8px 8px">
+        <p style="margin:0 0 16px">Dear <strong>{client}</strong>,</p>
+        <p style="margin:0 0 16px;color:#374151">Thank you for your payment. Please find your official receipt attached.</p>
+        <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:16px;margin:20px 0">
+          <table style="border-collapse:collapse;width:100%">
+            <tr><td style="color:#6b7280;padding:4px 16px 4px 0">Receipt Ref</td><td><strong>{rno}</strong></td></tr>
+            <tr><td style="color:#6b7280;padding:4px 16px 4px 0">Amount Paid</td><td><strong>UGX {paid:,.0f}</strong></td></tr>
+            <tr><td style="color:#6b7280;padding:4px 16px 4px 0">Payment Method</td><td><strong>{method}</strong></td></tr>
+            <tr><td style="color:#6b7280;padding:4px 16px 4px 0">Balance</td><td><strong>{bal_note}</strong></td></tr>
+          </table>
+        </div>
+        <p style="margin:0 0 16px;color:#374151">If you have any questions regarding this receipt, please don't hesitate to reach out.</p>
+        <p style="margin:0;color:#374151">
+          Best regards,<br><strong>Rincol Tech Solutions Ltd</strong><br>
+          <span style="color:#6b7280;font-size:12px">Tel: +256 775 102 684 | +256 701 586 001<br>Email: rincoltech@gmail.com<br>www.rincoltech.com</span>
+        </p>
+      </div>
+    </div>"""
+
     try:
-        from email.mime.base import MIMEBase
-        from email import encoders
-
-        bal_note = "Fully settled — thank you!" if balance <= 0 else f"UGX {balance:,.0f} outstanding"
-
-        msg = MIMEMultipart("mixed")
-        msg["Subject"] = f"Payment Receipt {rno} — Rincol Tech Solutions Ltd"
-        msg["From"]    = f"Rincol Tech Solutions <{_GM_USER}>"
-        msg["To"]      = customer_email
-
-        html_body = f"""
-        <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto">
-          <div style="background:#1a1d2e;padding:24px 28px;border-radius:8px 8px 0 0;text-align:center">
-            <div style="color:#89b4fa;font-size:20px;font-weight:bold">Rincol Tech Solutions Ltd</div>
-            <div style="color:#6b7280;font-size:12px;margin-top:4px">Solar & Energy Solutions</div>
-          </div>
-          <div style="border:1px solid #e5e7eb;border-top:none;padding:28px;border-radius:0 0 8px 8px">
-            <p style="margin:0 0 16px">Dear <strong>{client}</strong>,</p>
-            <p style="margin:0 0 16px;color:#374151">
-              Thank you for your payment. Please find your official receipt attached.
-            </p>
-            <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:16px;margin:20px 0">
-              <table style="border-collapse:collapse;width:100%">
-                <tr>
-                  <td style="color:#6b7280;padding:4px 16px 4px 0">Receipt Ref</td>
-                  <td><strong>{rno}</strong></td>
-                </tr>
-                <tr>
-                  <td style="color:#6b7280;padding:4px 16px 4px 0">Amount Paid</td>
-                  <td><strong>UGX {paid:,.0f}</strong></td>
-                </tr>
-                <tr>
-                  <td style="color:#6b7280;padding:4px 16px 4px 0">Payment Method</td>
-                  <td><strong>{method}</strong></td>
-                </tr>
-                <tr>
-                  <td style="color:#6b7280;padding:4px 16px 4px 0">Balance</td>
-                  <td><strong>{bal_note}</strong></td>
-                </tr>
-              </table>
-            </div>
-            <p style="margin:0 0 16px;color:#374151">
-              If you have any questions regarding this receipt, please don't hesitate to reach out.
-            </p>
-            <p style="margin:0;color:#374151">
-              Best regards,<br>
-              <strong>Rincol Tech Solutions Ltd</strong><br>
-              <span style="color:#6b7280;font-size:12px">
-                Tel: +256 775 102 684 | +256 701 586 001<br>
-                Email: rincoltech@gmail.com<br>
-                www.rincoltech.com
-              </span>
-            </p>
-          </div>
-        </div>"""
-
-        msg.attach(MIMEText(html_body, "html"))
-
-        part = MIMEBase("application", "pdf")
-        part.set_payload(pdf_bytes)
-        encoders.encode_base64(part)
-        part.add_header("Content-Disposition", f'attachment; filename="{rno}.pdf"')
-        msg.attach(part)
-
-        with smtplib.SMTP("smtp.gmail.com", 587) as s:
-            s.starttls()
-            s.login(_GM_USER, _GM_PASS)
-            s.sendmail(_GM_USER, [customer_email], msg.as_string())
+        requests.post(
+            "https://api.resend.com/emails",
+            headers={"Authorization": f"Bearer {_RESEND_KEY}", "Content-Type": "application/json"},
+            json={
+                "from": f"Rincol Tech Solutions <{_FROM_EMAIL}>",
+                "to": [customer_email],
+                "subject": f"Payment Receipt {rno} — Rincol Tech Solutions Ltd",
+                "html": html_body,
+                "attachments": [{"filename": f"{rno}.pdf",
+                                  "content": base64.b64encode(pdf_bytes).decode()}],
+            },
+            timeout=15,
+        )
     except Exception:
         pass
 
