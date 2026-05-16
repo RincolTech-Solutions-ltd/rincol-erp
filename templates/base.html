@@ -38,6 +38,11 @@
         </a>
       </li>
       <li class="nav-item">
+        <a href="{{ url_for('customers_list') }}" class="nav-link {% if 'customer' in request.endpoint or 'statement' in request.endpoint %}active{% endif %}">
+          <i class="bi bi-people"></i> Customers
+        </a>
+      </li>
+      <li class="nav-item">
         <a href="{{ url_for('quotations_list') }}" class="nav-link {% if 'quotation' in request.endpoint %}active{% endif %}">
           <i class="bi bi-file-earmark-text"></i> Quotations
         </a>

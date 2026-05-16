@@ -20,10 +20,11 @@ SUPABASE_KEY  = os.environ["SUPABASE_ANON_KEY"]
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 from utils.db import query, query_one, execute, next_quotation_number, close_db
-from utils.pdf import build_quotation_pdf, build_receipt_pdf
+from utils.pdf import build_quotation_pdf, build_receipt_pdf, build_statement_pdf
 from utils.notify import (notify_maintenance, notify_quotation,
                            notify_quotation_status, notify_receipt,
-                           notify_task, notify_settlement, notify_balancing_job)
+                           notify_task, notify_settlement, notify_balancing_job,
+                           send_customer_statement)
 from utils.tg_bot import handle_update as _tg_handle_update
 
 
@@ -239,11 +240,13 @@ def _save_quotation(qid):
     vat_amt   = subtotal * vat_rate / 100 if vat_rate else 0
     grand     = subtotal + vat_amt
 
+    customer_id = f.get("customer_id") or None
+
     execute("""
         INSERT INTO quotations (id, quotation_no, date, title, customer_name, customer_phone,
             customer_email, customer_address, delivery, validity, warranty,
-            payment_terms, status, total_amount, vat_rate, notes)
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            payment_terms, status, total_amount, vat_rate, notes, customer_id)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
         ON CONFLICT (id) DO UPDATE SET
             quotation_no=EXCLUDED.quotation_no, date=EXCLUDED.date,
             title=EXCLUDED.title, customer_name=EXCLUDED.customer_name,
@@ -252,13 +255,13 @@ def _save_quotation(qid):
             validity=EXCLUDED.validity, warranty=EXCLUDED.warranty,
             payment_terms=EXCLUDED.payment_terms, status=EXCLUDED.status,
             total_amount=EXCLUDED.total_amount, vat_rate=EXCLUDED.vat_rate,
-            notes=EXCLUDED.notes, updated_at=NOW()
+            notes=EXCLUDED.notes, customer_id=EXCLUDED.customer_id, updated_at=NOW()
     """, (qid, qno, f.get("date") or date.today().isoformat(),
           f.get("title","Quotation"), f["customer_name"], f.get("customer_phone",""),
           f.get("customer_email",""), f.get("customer_address",""),
           f.get("delivery",""), f.get("validity","30 days"), f.get("warranty",""),
           f.get("payment_terms","Cash / MM / EFT"), f.get("status","Draft"),
-          grand, vat_rate, f.get("notes","")))
+          grand, vat_rate, f.get("notes",""), customer_id))
 
     execute("DELETE FROM quotation_items WHERE quotation_id=%s", (qid,))
     for it in items:
@@ -2004,6 +2007,203 @@ def telegram_setup():
         timeout=10,
     )
     return jsonify({"webhook_url": webhook, "telegram_response": r.json()})
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# CUSTOMERS
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _customer_stats(cid: str) -> dict:
+    """Return total_quoted, total_collected, total_outstanding, job_count for a customer."""
+    row = query_one("""
+        SELECT
+            COUNT(q.id)                                          AS job_count,
+            COALESCE(SUM(q.total_amount), 0)                    AS total_quoted,
+            COALESCE(SUM(r.paid), 0)                            AS total_collected,
+            COALESCE(SUM(q.total_amount), 0)
+              - COALESCE(SUM(r.paid), 0)                        AS total_outstanding
+        FROM quotations q
+        LEFT JOIN (
+            SELECT quotation_id, SUM(amount_paid) AS paid
+            FROM receipts GROUP BY quotation_id
+        ) r ON r.quotation_id = q.id
+        WHERE q.customer_id = %s
+          AND q.status != 'Cancelled'
+    """, (cid,))
+    return dict(row) if row else {"job_count":0,"total_quoted":0,"total_collected":0,"total_outstanding":0}
+
+
+def _customer_quotations(cid: str) -> list:
+    rows = query("""
+        SELECT q.id, q.quotation_no, q.date, q.status, q.total_amount,
+               COALESCE(r.paid, 0) AS paid
+        FROM quotations q
+        LEFT JOIN (
+            SELECT quotation_id, SUM(amount_paid) AS paid
+            FROM receipts GROUP BY quotation_id
+        ) r ON r.quotation_id = q.id
+        WHERE q.customer_id = %s
+        ORDER BY q.date DESC
+    """, (cid,))
+    return [dict(r) for r in rows]
+
+
+def _next_customer_no() -> str:
+    row = query_one("SELECT 'CUST-' || LPAD(nextval('customer_no_seq')::TEXT, 4, '0') AS no")
+    return row["no"]
+
+
+@app.route("/customers")
+@login_required
+def customers_list():
+    search = request.args.get("q", "").strip()
+    sql = """
+        SELECT c.id, c.customer_no, c.name, c.phone, c.email,
+               COUNT(q.id) AS job_count,
+               COALESCE(SUM(q.total_amount),0) - COALESCE(SUM(r.paid),0) AS outstanding
+        FROM customers c
+        LEFT JOIN quotations q ON q.customer_id = c.id AND q.status != 'Cancelled'
+        LEFT JOIN (
+            SELECT quotation_id, SUM(amount_paid) AS paid FROM receipts GROUP BY quotation_id
+        ) r ON r.quotation_id = q.id
+    """
+    params = []
+    if search:
+        sql += " WHERE c.name ILIKE %s OR c.phone ILIKE %s"
+        params += [f"%{search}%", f"%{search}%"]
+    sql += " GROUP BY c.id ORDER BY c.name"
+    customers = [dict(r) for r in query(sql, params or None)]
+    return render_template("customers/list.html", customers=customers, search=search)
+
+
+@app.route("/customers/new", methods=["GET", "POST"])
+@login_required
+def customers_new():
+    if request.method == "POST":
+        f = request.form
+        cno = _next_customer_no()
+        execute("""
+            INSERT INTO customers (id, customer_no, name, phone, email, address, notes)
+            VALUES (gen_random_uuid(), %s, %s, %s, %s, %s, %s)
+        """, (cno, f["name"].strip(), f.get("phone","").strip(),
+              f.get("email","").strip(), f.get("address","").strip(),
+              f.get("notes","").strip()))
+        flash(f"Customer {cno} created.", "success")
+        return redirect(url_for("customers_list"))
+    return render_template("customers/form.html", customer=None)
+
+
+@app.route("/customers/<cid>")
+@login_required
+def customers_profile(cid):
+    customer = query_one("SELECT * FROM customers WHERE id=%s", (cid,))
+    if not customer:
+        abort(404)
+    stats      = _customer_stats(cid)
+    quotations = _customer_quotations(cid)
+    return render_template("customers/profile.html",
+                           customer=dict(customer), stats=stats, quotations=quotations)
+
+
+@app.route("/customers/<cid>/edit", methods=["GET", "POST"])
+@login_required
+def customers_edit(cid):
+    customer = query_one("SELECT * FROM customers WHERE id=%s", (cid,))
+    if not customer:
+        abort(404)
+    if request.method == "POST":
+        f = request.form
+        execute("""
+            UPDATE customers SET name=%s, phone=%s, email=%s, address=%s, notes=%s,
+                                 updated_at=NOW()
+            WHERE id=%s
+        """, (f["name"].strip(), f.get("phone","").strip(), f.get("email","").strip(),
+              f.get("address","").strip(), f.get("notes","").strip(), cid))
+        flash("Customer updated.", "success")
+        return redirect(url_for("customers_profile", cid=cid))
+    return render_template("customers/form.html", customer=dict(customer))
+
+
+@app.route("/customers/<cid>/send-statement", methods=["POST"])
+@login_required
+def customers_send_statement(cid):
+    customer = query_one("SELECT * FROM customers WHERE id=%s", (cid,))
+    if not customer:
+        abort(404)
+    customer  = dict(customer)
+    stats     = _customer_stats(cid)
+    quotations = _customer_quotations(cid)
+    stmt_url  = url_for("statement_public", token=customer["statement_token"], _external=True)
+    try:
+        pdf_bytes = build_statement_pdf(customer, quotations, stats)
+        import threading
+        threading.Thread(
+            target=send_customer_statement,
+            args=(customer, stats, pdf_bytes, stmt_url),
+            daemon=True,
+        ).start()
+        flash(f"Statement sent to {customer['email']}. Share this link too: {stmt_url}", "success")
+    except Exception as e:
+        flash(f"Could not generate statement PDF: {e}", "danger")
+    return redirect(url_for("customers_profile", cid=cid))
+
+
+@app.route("/customers/<cid>/regenerate-token", methods=["POST"])
+@login_required
+def customers_regenerate_token(cid):
+    execute("UPDATE customers SET statement_token=gen_random_uuid() WHERE id=%s", (cid,))
+    flash("Statement link regenerated. The old link is now invalid.", "info")
+    return redirect(url_for("customers_profile", cid=cid))
+
+
+# ── Public statement (no login — token-gated) ──────────────────────────────────
+
+@app.route("/s/<token>")
+def statement_public(token):
+    customer = query_one("SELECT * FROM customers WHERE statement_token=%s::uuid", (token,))
+    if not customer:
+        abort(404)
+    customer   = dict(customer)
+    stats      = _customer_stats(customer["id"])
+    quotations = _customer_quotations(customer["id"])
+    as_of      = __import__("datetime").date.today().strftime("%-d %B %Y")
+    return render_template("customers/statement_public.html",
+                           customer=customer, stats=stats,
+                           quotations=quotations, as_of=as_of)
+
+
+@app.route("/s/<token>/pdf")
+def statement_pdf(token):
+    customer = query_one("SELECT * FROM customers WHERE statement_token=%s::uuid", (token,))
+    if not customer:
+        abort(404)
+    customer   = dict(customer)
+    stats      = _customer_stats(customer["id"])
+    quotations = _customer_quotations(customer["id"])
+    pdf_bytes  = build_statement_pdf(customer, quotations, stats)
+    return send_file(
+        io.BytesIO(pdf_bytes),
+        mimetype="application/pdf",
+        as_attachment=True,
+        download_name=f"Statement_{customer['customer_no']}.pdf",
+    )
+
+
+# ── Customer JSON search (for quotation form picker) ──────────────────────────
+
+@app.route("/customers/search.json")
+@login_required
+def customers_search_json():
+    q = request.args.get("q", "").strip()
+    if len(q) < 2:
+        return jsonify([])
+    rows = query("""
+        SELECT id, customer_no, name, phone, email, address
+        FROM customers
+        WHERE name ILIKE %s OR phone ILIKE %s
+        ORDER BY name LIMIT 10
+    """, (f"%{q}%", f"%{q}%"))
+    return jsonify([dict(r) for r in rows])
 
 
 @app.route("/admin/test-email")

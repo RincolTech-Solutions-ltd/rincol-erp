@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit' if customer else 'New Customer' }}{% endblock %}
+{% block breadcrumb %}
+  <a href="{{ url_for('customers_list') }}">Customers</a> /
+  {{ 'Edit ' + customer.name if customer else 'New Customer' }}
+{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width:560px">
+  <div class="card-body">
+    <h6 class="mb-3">{{ 'Edit Customer' if customer else 'New Customer' }}</h6>
+    <form method="post">
+      <div class="mb-3">
+        <label class="form-label">Name <span class="text-danger">*</span></label>
+        <input type="text" name="name" class="form-control" required
+               value="{{ customer.name if customer else '' }}">
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Phone</label>
+        <input type="text" name="phone" class="form-control"
+               value="{{ customer.phone if customer else '' }}">
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Email</label>
+        <input type="email" name="email" class="form-control"
+               value="{{ customer.email if customer else '' }}">
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Address</label>
+        <input type="text" name="address" class="form-control"
+               value="{{ customer.address if customer else '' }}">
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Internal Notes <span class="text-muted small">(not shown to customer)</span></label>
+        <textarea name="notes" class="form-control" rows="2">{{ customer.notes if customer else '' }}</textarea>
+      </div>
+      <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary">Save</button>
+        <a href="{{ url_for('customers_profile', cid=customer.id) if customer else url_for('customers_list') }}"
+           class="btn btn-outline-secondary">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

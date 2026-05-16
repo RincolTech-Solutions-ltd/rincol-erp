@@ -1,6 +1,7 @@
 """PDF generation — matching Rincol Tech Solutions desktop app design."""
 import io
 import os
+import datetime
 import qrcode
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
@@ -496,6 +497,162 @@ def build_receipt_pdf(r: dict, sig_issued_bytes=None, sig_received_bytes=None) -
         "www.rincoltech.com  |  rincoltech@gmail.com  |  Tel: +256 775 102 684",
         foot_s,
     ))
+
+    doc.build(elems)
+    return buf.getvalue()
+
+
+def build_statement_pdf(customer: dict, quotations: list, stats: dict) -> bytes:
+    """Generate a customer account statement PDF."""
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buf, pagesize=A4,
+        leftMargin=1.8*cm, rightMargin=1.8*cm,
+        topMargin=1.5*cm, bottomMargin=1.5*cm,
+    )
+
+    # Styles
+    h1  = _ps("h1",  fontName="Helvetica-Bold", fontSize=16, textColor=WHITE)
+    sub = _ps("sub", fontName="Helvetica",       fontSize=8,  textColor=colors.HexColor("#9ca3af"))
+    h2  = _ps("h2",  fontName="Helvetica-Bold", fontSize=11, textColor=DARK)
+    bod = _ps("bod", fontName="Helvetica",       fontSize=9,  textColor=DGRAY)
+    sml = _ps("sml", fontName="Helvetica",       fontSize=8,  textColor=colors.HexColor("#6b7280"))
+    rgt = _ps("rgt", fontName="Helvetica",       fontSize=9,  textColor=DGRAY, alignment=TA_RIGHT)
+    rgt_b = _ps("rgt_b", fontName="Helvetica-Bold", fontSize=9, textColor=DARK, alignment=TA_RIGHT)
+    ctr = _ps("ctr", fontName="Helvetica",       fontSize=8,  textColor=DGRAY, alignment=TA_CENTER)
+
+    as_of = datetime.date.today().strftime("%-d %B %Y")
+
+    elems = []
+
+    # ── Header banner ──────────────────────────────────────────────────────────
+    hdr_data = [[
+        Paragraph("Rincol Tech Solutions Ltd<br/><font size='8' color='#6b7280'>Solar &amp; Energy Solutions</font>", h1),
+        Paragraph(f"Account Statement<br/><font size='8' color='#9ca3af'>As of {as_of}</font>",
+                  _ps("rh", fontName="Helvetica-Bold", fontSize=11, textColor=WHITE, alignment=TA_RIGHT)),
+    ]]
+    hdr_tbl = Table(hdr_data, colWidths=["60%", "40%"])
+    hdr_tbl.setStyle(TableStyle([
+        ("BACKGROUND", (0,0), (-1,-1), DARK),
+        ("VALIGN",     (0,0), (-1,-1), "MIDDLE"),
+        ("TOPPADDING", (0,0), (-1,-1), 14),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 14),
+        ("LEFTPADDING",  (0,0), (0,-1), 16),
+        ("RIGHTPADDING", (1,0), (1,-1), 16),
+    ]))
+    elems.append(hdr_tbl)
+    elems.append(Spacer(1, 0.4*cm))
+
+    # ── Customer block ─────────────────────────────────────────────────────────
+    cust_left = f"<b>{customer['name']}</b>"
+    if customer.get("phone"): cust_left += f"<br/>{customer['phone']}"
+    if customer.get("email"): cust_left += f"<br/>{customer['email']}"
+
+    cust_data = [[
+        [Paragraph("PREPARED FOR", sml), Spacer(1,2), Paragraph(cust_left, bod)],
+        [Paragraph("ACCOUNT REF", sml),  Spacer(1,2), Paragraph(f"<b>{customer['customer_no']}</b>", bod)],
+    ]]
+    cust_tbl = Table(cust_data, colWidths=["70%", "30%"])
+    cust_tbl.setStyle(TableStyle([
+        ("BACKGROUND",  (0,0), (-1,-1), LBLUE),
+        ("VALIGN",      (0,0), (-1,-1), "TOP"),
+        ("TOPPADDING",  (0,0), (-1,-1), 10),
+        ("BOTTOMPADDING",(0,0),(-1,-1), 10),
+        ("LEFTPADDING", (0,0), (0,-1), 12),
+        ("RIGHTPADDING",(1,0), (1,-1), 12),
+        ("ROUNDEDCORNERS", (0,0), (-1,-1), 4),
+    ]))
+    elems.append(cust_tbl)
+    elems.append(Spacer(1, 0.4*cm))
+
+    # ── Summary stats ──────────────────────────────────────────────────────────
+    total_q = stats.get("total_quoted", 0) or 0
+    total_c = stats.get("total_collected", 0) or 0
+    total_o = stats.get("total_outstanding", 0) or 0
+
+    stat_data = [[
+        [Paragraph("TOTAL QUOTED", sml),    Spacer(1,2), Paragraph(f"UGX {total_q:,.0f}", _ps("sv", fontName="Helvetica-Bold", fontSize=10, textColor=DARK))],
+        [Paragraph("TOTAL PAID", sml),      Spacer(1,2), Paragraph(f"UGX {total_c:,.0f}", _ps("sg", fontName="Helvetica-Bold", fontSize=10, textColor=colors.HexColor("#059669")))],
+        [Paragraph("OUTSTANDING", sml),     Spacer(1,2), Paragraph(f"UGX {total_o:,.0f}", _ps("sr", fontName="Helvetica-Bold", fontSize=10, textColor=colors.HexColor("#dc2626") if total_o > 0 else colors.HexColor("#059669")))],
+    ]]
+    stat_tbl = Table(stat_data, colWidths=["33%", "33%", "34%"])
+    stat_tbl.setStyle(TableStyle([
+        ("BACKGROUND",   (0,0), (-1,-1), colors.HexColor("#f9fafb")),
+        ("VALIGN",       (0,0), (-1,-1), "MIDDLE"),
+        ("TOPPADDING",   (0,0), (-1,-1), 10),
+        ("BOTTOMPADDING",(0,0), (-1,-1), 10),
+        ("LEFTPADDING",  (0,0), (-1,-1), 14),
+        ("LINEAFTER",    (0,0), (1,-1), 0.5, GREY_LINE),
+    ]))
+    elems.append(stat_tbl)
+    elems.append(Spacer(1, 0.5*cm))
+
+    # ── Job history table ──────────────────────────────────────────────────────
+    elems.append(Paragraph("Job History", _ps("jh", fontName="Helvetica-Bold", fontSize=10, textColor=DARK)))
+    elems.append(Spacer(1, 0.2*cm))
+
+    th = _ps("th", fontName="Helvetica-Bold", fontSize=8, textColor=WHITE)
+    td = _ps("td", fontName="Helvetica",      fontSize=8, textColor=DGRAY)
+    td_r = _ps("td_r", fontName="Helvetica", fontSize=8, textColor=DGRAY, alignment=TA_RIGHT)
+    td_rb = _ps("td_rb", fontName="Helvetica-Bold", fontSize=8, textColor=colors.HexColor("#dc2626"), alignment=TA_RIGHT)
+
+    rows = [[
+        Paragraph("REF", th), Paragraph("DATE", th), Paragraph("STATUS", th),
+        Paragraph("QUOTED", _ps("thr", fontName="Helvetica-Bold", fontSize=8, textColor=WHITE, alignment=TA_RIGHT)),
+        Paragraph("PAID", _ps("thr", fontName="Helvetica-Bold", fontSize=8, textColor=WHITE, alignment=TA_RIGHT)),
+        Paragraph("OUTSTANDING", _ps("thr", fontName="Helvetica-Bold", fontSize=8, textColor=WHITE, alignment=TA_RIGHT)),
+    ]]
+
+    for i, q in enumerate(quotations):
+        amt  = q.get("total_amount") or 0
+        paid = q.get("paid") or 0
+        owed = amt - paid
+        rows.append([
+            Paragraph(q.get("quotation_no",""), td),
+            Paragraph(str(q.get("date","")), td),
+            Paragraph(q.get("status",""), td),
+            Paragraph(f"{amt:,.0f}", td_r),
+            Paragraph(f"{paid:,.0f}", td_r),
+            Paragraph(f"{owed:,.0f}", td_rb if owed > 0 else td_r),
+        ])
+
+    # Totals row
+    rows.append([
+        Paragraph("TOTAL", _ps("tot", fontName="Helvetica-Bold", fontSize=8, textColor=DARK)),
+        Paragraph("", td), Paragraph("", td),
+        Paragraph(f"{total_q:,.0f}", _ps("tr", fontName="Helvetica-Bold", fontSize=8, textColor=DARK, alignment=TA_RIGHT)),
+        Paragraph(f"{total_c:,.0f}", _ps("tg", fontName="Helvetica-Bold", fontSize=8, textColor=colors.HexColor("#059669"), alignment=TA_RIGHT)),
+        Paragraph(f"{total_o:,.0f}", _ps("to", fontName="Helvetica-Bold", fontSize=8, textColor=colors.HexColor("#dc2626") if total_o > 0 else colors.HexColor("#059669"), alignment=TA_RIGHT)),
+    ])
+
+    col_w = [3*cm, 2.2*cm, 2.5*cm, 3*cm, 3*cm, 3*cm]
+    job_tbl = Table(rows, colWidths=col_w, repeatRows=1)
+    ts = [
+        ("BACKGROUND",   (0,0),  (-1,0),  BLUE),
+        ("BACKGROUND",   (0,-1), (-1,-1), LBLUE),
+        ("FONTNAME",     (0,-1), (-1,-1), "Helvetica-Bold"),
+        ("GRID",         (0,0),  (-1,-1), 0.3, GREY_LINE),
+        ("ROWBACKGROUNDS",(0,1), (-1,-2), [WHITE, LGRAY]),
+        ("TOPPADDING",   (0,0),  (-1,-1), 5),
+        ("BOTTOMPADDING",(0,0),  (-1,-1), 5),
+        ("LEFTPADDING",  (0,0),  (-1,-1), 6),
+        ("RIGHTPADDING", (0,0),  (-1,-1), 6),
+        ("VALIGN",       (0,0),  (-1,-1), "MIDDLE"),
+    ]
+    job_tbl.setStyle(TableStyle(ts))
+    elems.append(job_tbl)
+    elems.append(Spacer(1, 0.8*cm))
+
+    # ── Footer ─────────────────────────────────────────────────────────────────
+    elems.append(HRFlowable(width="100%", thickness=0.5, color=GREY_LINE))
+    elems.append(Spacer(1, 0.2*cm))
+    foot_data = [[
+        Paragraph("Rincol Tech Solutions Ltd  |  Tel: +256 775 102 684 / +256 701 586 001", sml),
+        Paragraph("rincoltech@gmail.com  |  www.rincoltech.com", _ps("fr", fontName="Helvetica", fontSize=8, textColor=colors.HexColor("#6b7280"), alignment=TA_RIGHT)),
+    ]]
+    foot_tbl = Table(foot_data, colWidths=["55%", "45%"])
+    foot_tbl.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"MIDDLE")]))
+    elems.append(foot_tbl)
 
     doc.build(elems)
     return buf.getvalue()

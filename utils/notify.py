@@ -479,6 +479,70 @@ def notify_task(record: dict, action: str = "created"):
     threading.Thread(target=_go, daemon=True).start()
 
 
+# ── Customer statement ────────────────────────────────────────────────────────
+
+def send_customer_statement(customer: dict, stats: dict, pdf_bytes: bytes, statement_url: str):
+    """Email a customer their account statement PDF + link to the live statement page."""
+    if not _RESEND_KEY or not customer.get("email"):
+        return
+    name    = customer.get("name", "Valued Customer")
+    cust_no = customer.get("customer_no", "")
+    total_o = stats.get("total_outstanding", 0) or 0
+    owed_line = (f"UGX {total_o:,.0f} outstanding across your account."
+                 if total_o > 0 else "Your account is fully settled — thank you!")
+
+    html_body = f"""
+    <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto">
+      <div style="background:#1a1d2e;padding:24px 28px;border-radius:8px 8px 0 0;text-align:center">
+        <div style="color:#89b4fa;font-size:20px;font-weight:bold">Rincol Tech Solutions Ltd</div>
+        <div style="color:#6b7280;font-size:12px;margin-top:4px">Solar & Energy Solutions</div>
+      </div>
+      <div style="border:1px solid #e5e7eb;border-top:none;padding:28px;border-radius:0 0 8px 8px">
+        <p style="margin:0 0 16px">Dear <strong>{name}</strong>,</p>
+        <p style="margin:0 0 16px;color:#374151">
+          Please find attached your account statement (Ref: <strong>{cust_no}</strong>).
+          {owed_line}
+        </p>
+        <p style="margin:0 0 16px;color:#374151">
+          You can also view your live statement online at any time using the link below:
+        </p>
+        <div style="margin:20px 0;text-align:center">
+          <a href="{statement_url}"
+             style="background:#89b4fa;color:#1a1d2e;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:bold">
+            View Statement Online
+          </a>
+        </div>
+        <p style="margin:0 0 16px;color:#374151">
+          If you have any questions, please don't hesitate to reach out.
+        </p>
+        <p style="margin:0;color:#374151">
+          Best regards,<br><strong>Rincol Tech Solutions Ltd</strong><br>
+          <span style="color:#6b7280;font-size:12px">
+            Tel: +256 775 102 684 | +256 701 586 001<br>
+            Email: rincoltech@gmail.com | www.rincoltech.com
+          </span>
+        </p>
+      </div>
+    </div>"""
+
+    try:
+        requests.post(
+            "https://api.resend.com/emails",
+            headers={"Authorization": f"Bearer {_RESEND_KEY}", "Content-Type": "application/json"},
+            json={
+                "from": f"Rincol Tech Solutions <{_FROM_EMAIL}>",
+                "to": [customer["email"]],
+                "subject": f"Account Statement — {name} ({cust_no}) — Rincol Tech Solutions",
+                "html": html_body,
+                "attachments": [{"filename": f"Statement_{cust_no}.pdf",
+                                  "content": base64.b64encode(pdf_bytes).decode()}],
+            },
+            timeout=15,
+        )
+    except Exception:
+        pass
+
+
 # ── Balancing jobs ───────────────────────────────────────────────────────────
 
 def notify_balancing_job(record: dict, action: str = "created"):

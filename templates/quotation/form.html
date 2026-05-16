@@ -70,26 +70,42 @@ window.CATALOG_ITEMS = {{ catalog | tojson }};
 
     {# Customer #}
     <div class="card mb-3">
-      <div class="card-header"><span class="section-header mb-0">Customer</span></div>
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span class="section-header mb-0">Customer</span>
+        <span class="text-muted" style="font-size:.75rem" id="customerRefBadge"></span>
+      </div>
       <div class="card-body">
+        {# Existing customer search #}
+        <div class="mb-2">
+          <label class="form-label">Search existing customer</label>
+          <div class="position-relative">
+            <input type="text" id="customerSearch" class="form-control form-control-sm"
+                   placeholder="Type name or phone…" autocomplete="off">
+            <ul id="customerDropdown"
+                class="list-group position-absolute w-100 shadow-sm"
+                style="z-index:1050;display:none;max-height:200px;overflow-y:auto"></ul>
+          </div>
+        </div>
+        <hr class="my-2">
+        <input type="hidden" name="customer_id" id="customerIdInput" value="{{ q.customer_id if q else '' }}">
         <div class="mb-2">
           <label class="form-label">Name *</label>
-          <input type="text" name="customer_name" class="form-control form-control-sm" required
+          <input type="text" name="customer_name" id="custName" class="form-control form-control-sm" required
                  value="{{ q.customer_name if q else '' }}">
         </div>
         <div class="mb-2">
           <label class="form-label">Phone</label>
-          <input type="text" name="customer_phone" class="form-control form-control-sm"
+          <input type="text" name="customer_phone" id="custPhone" class="form-control form-control-sm"
                  value="{{ q.customer_phone if q else '' }}">
         </div>
         <div class="mb-2">
           <label class="form-label">Email</label>
-          <input type="email" name="customer_email" class="form-control form-control-sm"
+          <input type="email" name="customer_email" id="custEmail" class="form-control form-control-sm"
                  value="{{ q.customer_email if q else '' }}">
         </div>
         <div>
           <label class="form-label">Address</label>
-          <input type="text" name="customer_address" class="form-control form-control-sm"
+          <input type="text" name="customer_address" id="custAddress" class="form-control form-control-sm"
                  value="{{ q.customer_address if q else '' }}">
         </div>
       </div>
@@ -267,4 +283,54 @@ window.CATALOG_ITEMS = {{ catalog | tojson }};
 
 </div>{# end row #}
 </form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const searchInput = document.getElementById('customerSearch');
+  const dropdown    = document.getElementById('customerDropdown');
+  const idInput     = document.getElementById('customerIdInput');
+  const badge       = document.getElementById('customerRefBadge');
+
+  function fillCustomer(c) {
+    document.getElementById('custName').value    = c.name    || '';
+    document.getElementById('custPhone').value   = c.phone   || '';
+    document.getElementById('custEmail').value   = c.email   || '';
+    document.getElementById('custAddress').value = c.address || '';
+    idInput.value = c.id;
+    badge.textContent = c.customer_no;
+    searchInput.value = '';
+    dropdown.style.display = 'none';
+  }
+
+  let timer;
+  searchInput.addEventListener('input', function () {
+    clearTimeout(timer);
+    const q = this.value.trim();
+    if (q.length < 2) { dropdown.style.display = 'none'; return; }
+    timer = setTimeout(() => {
+      fetch(`/customers/search.json?q=${encodeURIComponent(q)}`)
+        .then(r => r.json())
+        .then(data => {
+          dropdown.innerHTML = '';
+          if (!data.length) { dropdown.style.display = 'none'; return; }
+          data.forEach(c => {
+            const li = document.createElement('li');
+            li.className = 'list-group-item list-group-item-action py-1 px-2';
+            li.style.cursor = 'pointer';
+            li.innerHTML = `<strong>${c.name}</strong> <span class="text-muted small">${c.phone || ''}</span> <span class="badge bg-secondary ms-1">${c.customer_no}</span>`;
+            li.addEventListener('click', () => fillCustomer(c));
+            dropdown.appendChild(li);
+          });
+          dropdown.style.display = 'block';
+        });
+    }, 250);
+  });
+
+  document.addEventListener('click', e => {
+    if (!searchInput.contains(e.target)) dropdown.style.display = 'none';
+  });
+})();
+</script>
 {% endblock %}
