@@ -2007,7 +2007,6 @@ def telegram_setup():
 
 
 @app.route("/admin/test-email")
-@login_required
 def test_email():
     """Synchronous SMTP test — returns success or the actual error message."""
     import smtplib
