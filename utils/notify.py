@@ -8,8 +8,8 @@ import requests
 # ── Config ────────────────────────────────────────────────────────────────────
 _TG_TOKEN    = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 _TG_CHAT     = os.environ.get("TELEGRAM_CHAT_ID", "")
-_RESEND_KEY  = os.environ.get("RESEND_API_KEY", "")
-_FROM_EMAIL  = os.environ.get("EMAIL_FROM", "onboarding@resend.dev")
+_SG_KEY      = os.environ.get("SENDGRID_API_KEY", "")
+_FROM_EMAIL  = os.environ.get("EMAIL_FROM", "rincoltech@gmail.com")
 _NOTIFY_TO   = [e.strip() for e in os.environ.get("NOTIFY_EMAILS", "").split(",") if e.strip()]
 _APP_URL     = os.environ.get("APP_BASE_URL", "https://rincol-erp.onrender.com")
 
@@ -57,19 +57,36 @@ def _dm(person: str, text: str, keyboard=None):
         pass
 
 
-def _send_email(subject: str, html_body: str):
-    if not _RESEND_KEY or not _NOTIFY_TO:
+def _sg_send(to: list, subject: str, html_body: str, attachments: list = None):
+    """Send via SendGrid Web API. attachments = [{"filename": "x.pdf", "content": base64str}]"""
+    if not _SG_KEY:
         return
+    body = {
+        "personalizations": [{"to": [{"email": e} for e in to]}],
+        "from": {"email": _FROM_EMAIL, "name": "Rincol Tech Solutions"},
+        "subject": subject,
+        "content": [{"type": "text/html", "value": html_body}],
+    }
+    if attachments:
+        body["attachments"] = [
+            {"content": a["content"], "filename": a["filename"], "type": "application/pdf"}
+            for a in attachments
+        ]
     try:
         requests.post(
-            "https://api.resend.com/emails",
-            headers={"Authorization": f"Bearer {_RESEND_KEY}", "Content-Type": "application/json"},
-            json={"from": f"Rincol ERP <{_FROM_EMAIL}>", "to": _NOTIFY_TO,
-                  "subject": subject, "html": html_body},
-            timeout=10,
+            "https://api.sendgrid.com/v3/mail/send",
+            headers={"Authorization": f"Bearer {_SG_KEY}", "Content-Type": "application/json"},
+            json=body,
+            timeout=15,
         )
     except Exception:
         pass
+
+
+def _send_email(subject: str, html_body: str):
+    if not _SG_KEY or not _NOTIFY_TO:
+        return
+    _sg_send(_NOTIFY_TO, subject, html_body)
 
 
 def _fire(tg_text: str, subject: str, html: str):
@@ -295,22 +312,9 @@ def _send_quotation_to_customer(qno: str, client: str, amount: float,
       </div>
     </div>"""
 
-    try:
-        requests.post(
-            "https://api.resend.com/emails",
-            headers={"Authorization": f"Bearer {_RESEND_KEY}", "Content-Type": "application/json"},
-            json={
-                "from": f"Rincol Tech Solutions <{_FROM_EMAIL}>",
-                "to": [customer_email],
-                "subject": subject,
-                "html": html_body,
-                "attachments": [{"filename": f"{qno}.pdf",
-                                  "content": base64.b64encode(pdf_bytes).decode()}],
-            },
-            timeout=15,
-        )
-    except Exception:
-        pass
+    _sg_send([customer_email], subject, html_body,
+             attachments=[{"filename": f"{qno}.pdf",
+                           "content": base64.b64encode(pdf_bytes).decode()}])
 
 
 def notify_quotation_status(record: dict, new_status: str, pdf_bytes: bytes = None):
@@ -415,22 +419,9 @@ def _send_receipt_to_customer(rno: str, client: str, paid: float, balance: float
       </div>
     </div>"""
 
-    try:
-        requests.post(
-            "https://api.resend.com/emails",
-            headers={"Authorization": f"Bearer {_RESEND_KEY}", "Content-Type": "application/json"},
-            json={
-                "from": f"Rincol Tech Solutions <{_FROM_EMAIL}>",
-                "to": [customer_email],
-                "subject": f"Payment Receipt {rno} — Rincol Tech Solutions Ltd",
-                "html": html_body,
-                "attachments": [{"filename": f"{rno}.pdf",
-                                  "content": base64.b64encode(pdf_bytes).decode()}],
-            },
-            timeout=15,
-        )
-    except Exception:
-        pass
+    _sg_send([customer_email], f"Payment Receipt {rno} — Rincol Tech Solutions Ltd", html_body,
+             attachments=[{"filename": f"{rno}.pdf",
+                           "content": base64.b64encode(pdf_bytes).decode()}])
 
 
 # ── Tasks ─────────────────────────────────────────────────────────────────────
@@ -525,22 +516,11 @@ def send_customer_statement(customer: dict, stats: dict, pdf_bytes: bytes, state
       </div>
     </div>"""
 
-    try:
-        requests.post(
-            "https://api.resend.com/emails",
-            headers={"Authorization": f"Bearer {_RESEND_KEY}", "Content-Type": "application/json"},
-            json={
-                "from": f"Rincol Tech Solutions <{_FROM_EMAIL}>",
-                "to": [customer["email"]],
-                "subject": f"Account Statement — {name} ({cust_no}) — Rincol Tech Solutions",
-                "html": html_body,
-                "attachments": [{"filename": f"Statement_{cust_no}.pdf",
-                                  "content": base64.b64encode(pdf_bytes).decode()}],
-            },
-            timeout=15,
-        )
-    except Exception:
-        pass
+    _sg_send([customer["email"]],
+             f"Account Statement — {name} ({cust_no}) — Rincol Tech Solutions",
+             html_body,
+             attachments=[{"filename": f"Statement_{cust_no}.pdf",
+                           "content": base64.b64encode(pdf_bytes).decode()}])
 
 
 # ── Balancing jobs ───────────────────────────────────────────────────────────

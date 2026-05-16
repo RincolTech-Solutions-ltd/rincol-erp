@@ -2210,20 +2210,24 @@ def customers_search_json():
 def test_email():
     """Resend API test — returns success or the actual error."""
     import requests as _req
-    key      = os.environ.get("RESEND_API_KEY", "")
-    from_    = os.environ.get("EMAIL_FROM", "onboarding@resend.dev")
+    key      = os.environ.get("SENDGRID_API_KEY", "")
+    from_    = os.environ.get("EMAIL_FROM", "rincoltech@gmail.com")
     notify_to = os.environ.get("NOTIFY_EMAILS", "arinda.hillary@gmail.com")
     to_list  = [e.strip() for e in notify_to.split(",") if e.strip()]
     try:
         r = _req.post(
-            "https://api.resend.com/emails",
+            "https://api.sendgrid.com/v3/mail/send",
             headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-            json={"from": f"Rincol ERP <{from_}>", "to": to_list,
-                  "subject": "Rincol ERP — email test", "html": "<p>Resend is working.</p>"},
+            json={
+                "personalizations": [{"to": [{"email": e} for e in to_list]}],
+                "from": {"email": from_, "name": "Rincol Tech Solutions"},
+                "subject": "Rincol ERP — email test",
+                "content": [{"type": "text/html", "value": "<p>SendGrid is working.</p>"}],
+            },
             timeout=10,
         )
-        return jsonify({"status": "ok" if r.status_code == 200 else "error",
-                        "resend_status": r.status_code, "resend_body": r.json(),
+        return jsonify({"status": "ok" if r.status_code == 202 else "error",
+                        "sg_status": r.status_code,
                         "from": from_, "to": to_list})
     except Exception as e:
         return jsonify({"status": "error", "error": str(e)})
