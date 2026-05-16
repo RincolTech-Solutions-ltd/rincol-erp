@@ -132,11 +132,11 @@
         </tbody>
         {% if quotations %}
         <tfoot class="fw-semibold">
-          <tr class="table-secondary">
+          <tr style="border-top:2px solid var(--bs-border-color)">
             <td colspan="3">Total</td>
             <td class="text-end money">{{ '{:,.0f}'.format(stats.total_quoted or 0) }}</td>
-            <td class="text-end money text-success">{{ '{:,.0f}'.format(stats.total_collected or 0) }}</td>
-            <td class="text-end money {% if (stats.total_outstanding or 0) > 0 %}text-danger{% endif %}">
+            <td class="text-end money" style="color:#198754">{{ '{:,.0f}'.format(stats.total_collected or 0) }}</td>
+            <td class="text-end money" style="color:{% if (stats.total_outstanding or 0) > 0 %}#dc3545{% else %}#198754{% endif %}">
               {{ '{:,.0f}'.format(stats.total_outstanding or 0) }}
             </td>
           </tr>
