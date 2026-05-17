@@ -1190,10 +1190,18 @@ def balancing_edit(jid=None):
             q = query_one("SELECT * FROM quotations WHERE id=%s", (qid,))
             if q:
                 execs = query(
-                    "SELECT executor_name, executor_payment FROM job_executions "
+                    "SELECT executor_name, executor_payment, execution_date FROM job_executions "
                     "WHERE quotation_id=%s ORDER BY id",
                     (qid,)
                 )
+                # Guard: no executor recorded — send back to quotation with a clear message
+                if not execs:
+                    flash(
+                        f'No executor recorded for {q["quotation_no"]}. '
+                        f'Add an executor first, then come back to balance.',
+                        "warning"
+                    )
+                    return redirect(url_for("quotations_view", qid=qid) + "#job-execution")
                 prefill_spend = []
                 for exe in (execs or []):
                     pay = float(exe.get("executor_payment") or 0)
@@ -1204,12 +1212,13 @@ def balancing_edit(jid=None):
                             "paid_by": name if name in ("Hillary", "Dennis") else "Dennis",
                             "amount": pay,
                         })
+                last_exe = execs[-1] if execs else None
                 prefill = {
                     "job_name":            f"{q['customer_name']} — {q['quotation_no']}",
                     "quoted":              q["total_amount"],
                     "linked_quotation_id": qid,
-                    "date": (exe["execution_date"].isoformat()
-                             if exe and exe.get("execution_date") else ""),
+                    "date": (last_exe["execution_date"].isoformat()
+                             if last_exe and last_exe.get("execution_date") else ""),
                     "spend_lines":         prefill_spend,
                 }
 
