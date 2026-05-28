@@ -141,8 +141,14 @@
       </table>
     </div>
 
-    {# Download button #}
-    <div class="no-print text-center">
+    {# Download button + back link for logged-in staff #}
+    <div class="no-print text-center" style="display:flex;justify-content:center;align-items:center;gap:16px;flex-wrap:wrap">
+      {% if current_user.is_authenticated %}
+      <a href="{{ url_for('customers_profile', cid=customer.id) }}"
+         style="background:#f3f4f6;color:#374151;border:1px solid #d1d5db;border-radius:6px;padding:10px 20px;font-weight:600;text-decoration:none;display:inline-flex;align-items:center;gap:6px">
+        <i class="bi bi-arrow-left"></i> Back to Profile
+      </a>
+      {% endif %}
       <a href="{{ url_for('statement_pdf', token=customer.statement_token) }}" class="download-btn">
         <i class="bi bi-file-earmark-pdf"></i> Download PDF
       </a>

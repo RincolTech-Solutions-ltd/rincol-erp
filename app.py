@@ -238,7 +238,7 @@ def _save_quotation(qid):
     apply_vat = f.get("apply_vat") == "1"
     vat_rate  = float(f.get("vat_rate") or 18) if apply_vat else None
     vat_amt   = subtotal * vat_rate / 100 if vat_rate else 0
-    grand     = subtotal + vat_amt
+    grand     = round(subtotal + vat_amt, 2)
 
     customer_id = f.get("customer_id") or None
 
