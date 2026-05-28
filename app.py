@@ -150,6 +150,7 @@ def dashboard():
 @login_required
 def quotations_list():
     status  = request.args.get("status", "")
+    payment = request.args.get("payment", "")
     search  = request.args.get("q", "")
     sql     = ("SELECT q.id, q.quotation_no, q.customer_name, q.customer_phone, "
                "q.total_amount, q.status, q.date, COALESCE(r.paid, 0) AS paid "
@@ -163,9 +164,16 @@ def quotations_list():
     if search:
         sql += " AND (q.customer_name ILIKE %s OR q.quotation_no ILIKE %s)"
         params += [f"%{search}%", f"%{search}%"]
+    if payment == "unpaid":
+        sql += " AND COALESCE(r.paid, 0) <= 0 AND q.status != 'Cancelled'"
+    elif payment == "partial":
+        sql += " AND COALESCE(r.paid, 0) > 0 AND COALESCE(r.paid, 0) < q.total_amount AND q.status != 'Cancelled'"
+    elif payment == "paid":
+        sql += " AND COALESCE(r.paid, 0) >= q.total_amount AND q.status != 'Cancelled'"
     sql += " ORDER BY q.created_at DESC"
     rows = query(sql, params)
-    return render_template("quotation/list.html", quotations=rows, status=status, search=search)
+    return render_template("quotation/list.html", quotations=rows,
+                           status=status, payment=payment, search=search)
 
 
 @app.route("/quotations/new", methods=["GET", "POST"])
