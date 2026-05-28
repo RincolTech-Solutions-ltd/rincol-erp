@@ -141,18 +141,39 @@
       </table>
     </div>
 
-    {# Download button + back link for logged-in staff #}
-    <div class="no-print text-center" style="display:flex;justify-content:center;align-items:center;gap:16px;flex-wrap:wrap">
+    {# Action buttons: back (staff only), share, download #}
+    <div class="no-print text-center" style="display:flex;justify-content:center;align-items:center;gap:12px;flex-wrap:wrap;margin-top:8px">
       {% if current_user.is_authenticated %}
       <a href="{{ url_for('customers_profile', cid=customer.id) }}"
          style="background:#f3f4f6;color:#374151;border:1px solid #d1d5db;border-radius:6px;padding:10px 20px;font-weight:600;text-decoration:none;display:inline-flex;align-items:center;gap:6px">
-        <i class="bi bi-arrow-left"></i> Back to Profile
+        <i class="bi bi-arrow-left"></i> Back
       </a>
       {% endif %}
-      <a href="{{ url_for('statement_pdf', token=customer.statement_token) }}" class="download-btn">
+      <button onclick="shareStatement()" id="share-btn"
+         style="background:#f3f4f6;color:#374151;border:1px solid #d1d5db;border-radius:6px;padding:10px 20px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px">
+        <i class="bi bi-share"></i> Share
+      </button>
+      <a href="{{ url_for('statement_pdf', token=customer.statement_token) }}" target="_blank" class="download-btn">
         <i class="bi bi-file-earmark-pdf"></i> Download PDF
       </a>
     </div>
+    <script>
+    async function shareStatement() {
+      const url = window.location.href;
+      if (navigator.share) {
+        try {
+          await navigator.share({ title: 'Account Statement — {{ customer.name }}', url: url });
+        } catch(e) { if (e.name !== 'AbortError') fallbackCopy(url); }
+      } else { fallbackCopy(url); }
+    }
+    function fallbackCopy(url) {
+      navigator.clipboard.writeText(url).then(() => {
+        const btn = document.getElementById('share-btn');
+        btn.innerHTML = '<i class="bi bi-check2"></i> Copied!';
+        setTimeout(() => { btn.innerHTML = '<i class="bi bi-share"></i> Share'; }, 2000);
+      });
+    }
+    </script>
 
   </div>
 
