@@ -2183,10 +2183,12 @@ def statement_public(token):
     customer   = dict(customer)
     stats      = _customer_stats(customer["id"])
     quotations = _customer_quotations(customer["id"])
-    as_of      = __import__("datetime").date.today().strftime("%-d %B %Y")
+    as_of    = __import__("datetime").date.today().strftime("%-d %B %Y")
+    back_cid = request.args.get("back", "")
     return render_template("customers/statement_public.html",
                            customer=customer, stats=stats,
-                           quotations=quotations, as_of=as_of)
+                           quotations=quotations, as_of=as_of,
+                           back_cid=back_cid)
 
 
 @app.route("/s/<token>/pdf")
