@@ -13,7 +13,7 @@
 {# Filters #}
 <form method="get" class="row g-2 mb-3">
   <div class="col-auto">
-    <input type="text" name="q" class="form-control form-control-sm" placeholder="Search customer / no." value="{{ search }}">
+    <input type="text" name="q" id="q_search" class="form-control form-control-sm" placeholder="Search customer / no." value="{{ search }}" autocomplete="off">
   </div>
   <div class="col-auto">
     <select name="status" class="form-select form-select-sm">
@@ -47,7 +47,7 @@
             <th class="text-end">Amount (UGX)</th><th>Job Status</th><th>Payment</th><th>Date</th><th></th>
           </tr>
         </thead>
-        <tbody>
+        <tbody id="quotations-tbody">
           {% for q in quotations %}
           <tr>
             <td><a href="{{ url_for('quotations_view', qid=q.id) }}" class="text-blue text-decoration-none">{{ q.quotation_no }}</a></td>
@@ -87,3 +87,4 @@
   </div>
 </div>
 {% endblock %}
+{% block scripts %}<script>liveSearch('q_search','quotations-tbody');</script>{% endblock %}

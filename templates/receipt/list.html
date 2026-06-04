@@ -4,7 +4,11 @@
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
-  <h5 class="mb-0">Receipts</h5>
+  <div class="d-flex align-items-center gap-2">
+    <h5 class="mb-0">Receipts</h5>
+    <input type="text" id="q_search" class="form-control form-control-sm" style="width:220px"
+           placeholder="Search customer / no." autocomplete="off">
+  </div>
   <a href="{{ url_for('receipts_new') }}" class="btn btn-primary btn-sm"><i class="bi bi-plus"></i> New</a>
 </div>
 
@@ -15,7 +19,7 @@
         <thead>
           <tr><th>No.</th><th>Customer</th><th class="text-end">Invoice (UGX)</th><th class="text-end">Paid (UGX)</th><th class="text-end">Balance</th><th>Date</th><th></th></tr>
         </thead>
-        <tbody>
+        <tbody id="receipts-tbody">
           {% for r in receipts %}
           <tr>
             <td><a href="{{ url_for('receipts_view', rid=r.id) }}" class="text-blue text-decoration-none">{{ r.receipt_no }}</a></td>
@@ -37,3 +41,4 @@
   </div>
 </div>
 {% endblock %}
+{% block scripts %}<script>liveSearch('q_search','receipts-tbody');</script>{% endblock %}

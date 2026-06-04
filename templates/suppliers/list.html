@@ -4,7 +4,11 @@
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
-  <h5 class="mb-0">Suppliers / Service Providers</h5>
+  <div class="d-flex align-items-center gap-2">
+    <h5 class="mb-0">Suppliers / Service Providers</h5>
+    <input type="text" id="q_search" class="form-control form-control-sm" style="width:220px"
+           placeholder="Search name / category" autocomplete="off">
+  </div>
   <a href="{{ url_for('suppliers_edit') }}" class="btn btn-primary btn-sm"><i class="bi bi-plus"></i> Add</a>
 </div>
 
@@ -15,7 +19,7 @@
         <thead>
           <tr><th>ID</th><th>Name</th><th>Contact</th><th>Phone</th><th>Location</th><th>Categories</th><th></th></tr>
         </thead>
-        <tbody>
+        <tbody id="suppliers-tbody">
           {% for s in suppliers %}
           <tr>
             <td class="text-muted small font-monospace">{{ s.id }}</td>
@@ -41,3 +45,4 @@
   </div>
 </div>
 {% endblock %}
+{% block scripts %}<script>liveSearch('q_search','suppliers-tbody');</script>{% endblock %}

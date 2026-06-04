@@ -97,6 +97,11 @@
   </div>
 </div>
 
+<div class="d-flex justify-content-between align-items-center mb-2">
+  <input type="text" id="q_search" class="form-control form-control-sm" style="width:220px"
+         placeholder="Search jobs…" autocomplete="off">
+</div>
+
 <div class="card">
   <div class="card-body p-0">
     <div class="table-responsive">
@@ -113,7 +118,7 @@
             <th></th>
           </tr>
         </thead>
-        <tbody>
+        <tbody id="balancing-tbody">
           {% for j in jobs %}
           {% set status_cls = {'Open':'secondary','In Progress':'warning','Settled':'success'}.get(j.computed_status, 'secondary') %}
           <tr>
@@ -155,3 +160,4 @@
   </div>
 </div>
 {% endblock %}
+{% block scripts %}<script>liveSearch('q_search','balancing-tbody');</script>{% endblock %}

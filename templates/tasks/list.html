@@ -24,9 +24,13 @@
       Cancelled
     </a>
   </div>
-  <a href="{{ url_for('tasks_edit') }}" class="btn btn-primary btn-sm">
-    <i class="bi bi-plus"></i> New Task
-  </a>
+  <div class="d-flex align-items-center gap-2">
+    <input type="text" id="q_search" class="form-control form-control-sm" style="width:200px"
+           placeholder="Search tasks…" autocomplete="off">
+    <a href="{{ url_for('tasks_edit') }}" class="btn btn-primary btn-sm">
+      <i class="bi bi-plus"></i> New Task
+    </a>
+  </div>
 </div>
 
 <div class="card">
@@ -44,7 +48,7 @@
             <th></th>
           </tr>
         </thead>
-        <tbody>
+        <tbody id="tasks-tbody">
           {% for t in tasks %}
           {% set overdue = t.due_date and t.due_date < today %}
           {% set due_soon = t.due_date and not overdue and (t.due_date - today).days <= 3 %}
@@ -137,3 +141,4 @@
   <span><span style="display:inline-block;width:12px;height:12px;background:rgba(234,179,8,.15);border-radius:2px"></span> Due within 3 days</span>
 </div>
 {% endblock %}
+{% block scripts %}<script>liveSearch('q_search','tasks-tbody');</script>{% endblock %}

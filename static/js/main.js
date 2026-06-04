@@ -417,3 +417,18 @@ function initColResize(tableId) {
 })();
 
 // Receipt auto-fill and balance logic is handled inline in templates/receipt/form.html
+
+// ── Live search — filters table rows as you type ─────────────────────────────
+// Usage: liveSearch('input-id', 'tbody-id')
+function liveSearch(inputId, tbodyId) {
+  const inp   = document.getElementById(inputId);
+  const tbody = document.getElementById(tbodyId);
+  if (!inp || !tbody) return;
+  inp.addEventListener('input', function () {
+    const q = this.value.toLowerCase().trim();
+    Array.from(tbody.rows).forEach(function (row) {
+      if (row.cells.length <= 1) return; // skip empty-state rows
+      row.style.display = (!q || row.textContent.toLowerCase().includes(q)) ? '' : 'none';
+    });
+  });
+}
