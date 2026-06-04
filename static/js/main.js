@@ -418,17 +418,33 @@ function initColResize(tableId) {
 
 // Receipt auto-fill and balance logic is handled inline in templates/receipt/form.html
 
-// ── Live search — filters table rows as you type ─────────────────────────────
-// Usage: liveSearch('input-id', 'tbody-id')
+// ── Live search / filter helpers ─────────────────────────────────────────────
+// liveSearch: text filter only.  liveFilter: text + select dropdown combined.
+function _applyFilter(tbody, q, st) {
+  Array.from(tbody.rows).forEach(function (row) {
+    if (row.cells.length <= 1) return;
+    const text = row.textContent.toLowerCase();
+    row.style.display = ((!q || text.includes(q)) && (!st || text.includes(st))) ? '' : 'none';
+  });
+}
 function liveSearch(inputId, tbodyId) {
   const inp   = document.getElementById(inputId);
   const tbody = document.getElementById(tbodyId);
   if (!inp || !tbody) return;
   inp.addEventListener('input', function () {
-    const q = this.value.toLowerCase().trim();
-    Array.from(tbody.rows).forEach(function (row) {
-      if (row.cells.length <= 1) return; // skip empty-state rows
-      row.style.display = (!q || row.textContent.toLowerCase().includes(q)) ? '' : 'none';
-    });
+    _applyFilter(tbody, this.value.toLowerCase().trim(), '');
   });
+}
+function liveFilter(inputId, selectId, tbodyId) {
+  const inp   = document.getElementById(inputId);
+  const sel   = document.getElementById(selectId);
+  const tbody = document.getElementById(tbodyId);
+  if (!tbody) return;
+  function apply() {
+    _applyFilter(tbody,
+      inp ? inp.value.toLowerCase().trim() : '',
+      sel ? sel.value.toLowerCase().trim() : '');
+  }
+  inp?.addEventListener('input',  apply);
+  sel?.addEventListener('change', apply);
 }

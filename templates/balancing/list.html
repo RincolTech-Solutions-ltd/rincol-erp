@@ -97,9 +97,15 @@
   </div>
 </div>
 
-<div class="d-flex justify-content-between align-items-center mb-2">
+<div class="d-flex gap-2 mb-2">
   <input type="text" id="q_search" class="form-control form-control-sm" style="width:220px"
          placeholder="Search jobs…" autocomplete="off">
+  <select id="status_filter" class="form-select form-select-sm" style="width:160px">
+    <option value="">All statuses</option>
+    <option value="open">Open</option>
+    <option value="in progress">In Progress</option>
+    <option value="settled">Settled</option>
+  </select>
 </div>
 
 <div class="card">
@@ -160,4 +166,4 @@
   </div>
 </div>
 {% endblock %}
-{% block scripts %}<script>liveSearch('q_search','balancing-tbody');</script>{% endblock %}
+{% block scripts %}<script>liveFilter('q_search','status_filter','balancing-tbody');</script>{% endblock %}
