@@ -624,7 +624,7 @@ def receipts_edit(rid):
             issued_name=%s, received_name=%s, collected_by=%s, quotation_id=%s,
             payment_method=%s
             WHERE id=%s""",
-            (f.get("receipt_no",""), f.get("date") or date.today().isoformat(),
+            (f.get("receipt_no","").strip() or r["receipt_no"], f.get("date") or date.today().isoformat(),
              f["customer_name"], f.get("customer_phone",""), f.get("customer_email",""),
              f.get("customer_address",""), f.get("being_for",""),
              fig, paid, fig - paid, f.get("cheque_no",""),

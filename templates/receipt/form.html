@@ -16,7 +16,7 @@
         <div class="row g-2">
           <div class="col-6">
             <label class="form-label">Receipt No.</label>
-            <input type="text" name="receipt_no" class="form-control form-control-sm"
+            <input type="text" name="receipt_no" class="form-control form-control-sm" required
                    value="{{ r.receipt_no if r else (next_rno or '') }}"
                    placeholder="e.g. RCT-2026-001">
           </div>
@@ -157,7 +157,7 @@
           </div>
           <div class="col-6">
             <label class="form-label">Received By (customer name)</label>
-            <input type="text" name="received_name" class="form-control form-control-sm"
+            <input type="text" name="received_name" id="received_name" class="form-control form-control-sm"
                    value="{{ r.received_name if r else '' }}">
           </div>
         </div>
@@ -185,9 +185,10 @@
   const amtPaid   = document.getElementById('amount_paid');
   const balDisp   = document.getElementById('balance_display');
   const beingFor  = document.getElementById('being_for');
-  const nameEl    = document.getElementById('customer_name');
-  const phoneEl   = document.getElementById('customer_phone');
-  const emailEl   = document.getElementById('customer_email');
+  const nameEl     = document.getElementById('customer_name');
+  const phoneEl    = document.getElementById('customer_phone');
+  const emailEl    = document.getElementById('customer_email');
+  const receivedEl = document.getElementById('received_name');
 
   function fmt(n){ return 'UGX ' + Math.round(n).toLocaleString(); }
 
@@ -210,9 +211,10 @@
     const amount    = parseFloat(opt.dataset.amount)   || 0;
     const prevPaid  = parseFloat(opt.dataset.prevPaid) || 0;
     const bFor      = opt.dataset.beingFor || '';
-    if(nameEl  && !nameEl.value)  nameEl.value  = opt.dataset.customer || '';
-    if(phoneEl && !phoneEl.value) phoneEl.value = opt.dataset.phone    || '';
-    if(emailEl && !emailEl.value) emailEl.value = opt.dataset.email    || '';
+    if(nameEl     && !nameEl.value)     nameEl.value     = opt.dataset.customer || '';
+    if(phoneEl    && !phoneEl.value)    phoneEl.value    = opt.dataset.phone    || '';
+    if(emailEl    && !emailEl.value)    emailEl.value    = opt.dataset.email    || '';
+    if(receivedEl && !receivedEl.value) receivedEl.value = opt.dataset.customer || '';
     amtFig.value  = amount.toLocaleString('en-US');
     prevVal.value = prevPaid;
     prevDisp.textContent = fmt(prevPaid);
