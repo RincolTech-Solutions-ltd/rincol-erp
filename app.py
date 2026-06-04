@@ -1321,10 +1321,12 @@ def tasks_list():
     params = []
     if status == "done":
         sql += " AND t.status='Done'"
+    elif status == "cancelled":
+        sql += " AND t.status='Cancelled'"
     elif status == "all":
         pass
     else:
-        sql += " AND t.status != 'Done'"
+        sql += " AND t.status NOT IN ('Done','Cancelled')"
     sql += " ORDER BY t.due_date ASC NULLS LAST, CASE t.priority WHEN 'Urgent' THEN 1 WHEN 'High' THEN 2 WHEN 'Normal' THEN 3 ELSE 4 END"
     rows = query(sql, params)
     today = date.today()
@@ -1338,6 +1340,13 @@ def tasks_edit(tid=None):
     task = query_one("SELECT * FROM tasks WHERE id=%s", (tid,)) if tid else None
     if request.method == "POST":
         f = request.form
+        if f.get("status") == "Cancelled" and not f.get("notes","").strip():
+            flash("Cancellation reason is required when status is Cancelled.", "danger")
+            quotations = query("SELECT id, quotation_no, customer_name FROM quotations ORDER BY date DESC LIMIT 100")
+            _default_members = ['Hillary', 'Dennis', 'Both']
+            _extra = query("SELECT DISTINCT assigned_to FROM tasks WHERE assigned_to IS NOT NULL AND assigned_to != '' ORDER BY assigned_to")
+            team_members = list(dict.fromkeys(_default_members + [r['assigned_to'] for r in _extra if r['assigned_to'] not in _default_members]))
+            return render_template("tasks/form.html", task=task or f, quotations=quotations, team_members=team_members)
         if tid:
             execute("""UPDATE tasks SET title=%s, description=%s, due_date=%s,
                 priority=%s, status=%s, assigned_to=%s, linked_quotation_id=%s,

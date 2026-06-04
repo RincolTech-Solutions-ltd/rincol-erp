@@ -40,8 +40,8 @@
           </div>
           <div class="col-6">
             <label class="form-label">Status</label>
-            <select name="status" class="form-select form-select-sm">
-              {% for s in ['Pending','In Progress','Done'] %}
+            <select name="status" id="status_select" class="form-select form-select-sm" onchange="onStatusChange(this.value)">
+              {% for s in ['Pending','In Progress','Done','Cancelled'] %}
               <option {% if task and task.status==s %}selected{% elif not task and s=='Pending' %}selected{% endif %}>{{ s }}</option>
               {% endfor %}
             </select>
@@ -75,8 +75,9 @@
             </select>
           </div>
           <div class="col-12">
-            <label class="form-label">Notes</label>
-            <textarea name="notes" class="form-control form-control-sm" rows="2">{{ task.notes if task else '' }}</textarea>
+            <label class="form-label" id="notes_label">Notes</label>
+            <textarea name="notes" id="notes_field" class="form-control form-control-sm" rows="2"
+                      placeholder="">{{ task.notes if task else '' }}</textarea>
           </div>
         </div>
       </div>
@@ -126,8 +127,22 @@ function initNameDropdown(selId, inpId) {
   sel.value = '__new__';
   inp.style.display = '';
 }
+function onStatusChange(val) {
+  var label = document.getElementById('notes_label');
+  var field = document.getElementById('notes_field');
+  if (val === 'Cancelled') {
+    label.innerHTML = 'Cancellation Reason <span class="text-danger">*</span>';
+    field.setAttribute('required', 'required');
+    field.placeholder = 'Why is this task being cancelled?';
+  } else {
+    label.innerHTML = 'Notes';
+    field.removeAttribute('required');
+    field.placeholder = '';
+  }
+}
 document.addEventListener('DOMContentLoaded', function() {
   initNameDropdown('sel_assigned_to', 'inp_assigned_to');
+  onStatusChange(document.getElementById('status_select').value);
 });
 </script>
 {% endblock %}
