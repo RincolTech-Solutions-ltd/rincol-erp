@@ -78,7 +78,7 @@
             </td>
             <td>
               {% if t.due_date %}
-                {% if overdue and t.status != 'Done' %}
+                {% if overdue and t.status not in ('Done','Cancelled') %}
                   <span class="text-danger fw-semibold">
                     <i class="bi bi-exclamation-circle-fill"></i> {{ t.due_date }}
                   </span>
