@@ -53,11 +53,11 @@
           {% set overdue = t.due_date and t.due_date < today %}
           {% set due_soon = t.due_date and not overdue and (t.due_date - today).days <= 3 %}
           {% set priority_cls = {'Urgent':'danger','High':'warning','Normal':'primary','Low':'secondary'}.get(t.priority,'secondary') %}
-          {% set status_cls = {'Done':'success','In Progress':'info','Pending':'secondary','Cancelled':'dark'}.get(t.status,'secondary') %}
+          {% set status_cls = {'Done':'success','In Progress':'info','Pending':'secondary'}.get(t.status,'secondary') %}
           <tr class="{% if overdue and t.status not in ('Done','Cancelled') %}table-danger table-danger-subtle{% elif due_soon and t.status != 'Cancelled' %}table-warning table-warning-subtle{% endif %}">
             <td>
               <a href="{{ url_for('tasks_edit', tid=t.id) }}" class="fw-semibold text-decoration-none
-                {% if t.status == 'Done' %}text-muted text-decoration-line-through{% endif %}">
+                {% if t.status in ('Done','Cancelled') %}text-muted text-decoration-line-through{% endif %}">
                 {{ t.title }}
               </a>
               {% if t.description %}
@@ -70,9 +70,11 @@
               </span>
             </td>
             <td>
-              <span class="badge bg-{{ status_cls }} bg-opacity-25 text-{{ status_cls }}">
-                {{ t.status }}
-              </span>
+              {% if t.status == 'Cancelled' %}
+                <span class="badge badge-cancelled">Cancelled</span>
+              {% else %}
+                <span class="badge bg-{{ status_cls }} bg-opacity-25 text-{{ status_cls }}">{{ t.status }}</span>
+              {% endif %}
             </td>
             <td>
               {% if t.due_date %}
