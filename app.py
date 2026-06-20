@@ -2,6 +2,7 @@
 import os
 import io
 import json
+import math
 import uuid
 from datetime import date, datetime
 from functools import wraps
@@ -1576,6 +1577,60 @@ def _recompute_financials(results, bom_total, params):
     results['payback_years']      = round(bom_total / annual_sav, 2) if annual_sav > 0 else 0
 
 
+def _reconcile_results_with_bom(s, bom_list):
+    """Return a results dict where panel/battery counts, array arrangement,
+    annual yield and all financials are derived from the *actual* BoM rather
+    than the stored engineering recommendation.
+
+    Once a BoM is edited (e.g. 4 panels in one series string instead of the
+    auto-recommended 2, or 1 battery instead of 2), the stored calc fields go
+    stale. This keeps the on-screen engineering summary, the financial
+    appraisal and the PPTX proposal all consistent with what was quoted.
+    """
+    r = dict(s)
+    panel_row = next((b for b in bom_list
+                      if 'solar panel' in str(b['description']).lower()
+                      and 'mount' not in str(b['description']).lower()), None)
+    battery_row = next((b for b in bom_list
+                        if str(b['description']).lower().startswith('battery')), None)
+
+    # --- Panels: actual count drives yield + array arrangement ---
+    if panel_row:
+        actual_panels    = int(float(panel_row['qty']))
+        strings_total    = max(1, int(r.get('strings_total') or 1))
+        panels_in_series = math.ceil(actual_panels / strings_total)
+        trackers         = max(1, int(s.get('mppt_trackers') or 1))
+        r['panels_recommended']  = actual_panels
+        r['panels_in_series']    = panels_in_series
+        r['strings_total']       = strings_total
+        r['strings_per_tracker'] = math.ceil(strings_total / trackers)
+        r['voltage_override']    = actual_panels > int(r.get('panels_by_energy') or actual_panels)
+        # The BoM is a human-approved, valid array → clear the stale string warning
+        r['inverter_flag']       = ''
+        panel_wp = float(s.get('panel_wp') or 0)
+        psh      = float(s.get('peak_sun_hours') or 5.5)
+        pr       = float(s.get('performance_ratio') or 0.75)
+        r['annual_yield_kwh'] = round(panel_wp * actual_panels * psh * 365 * pr / 1000, 1)
+
+    # --- Batteries: actual count drives the bank arrangement ---
+    if battery_row:
+        actual_batt = int(float(battery_row['qty']))
+        batt_series = max(1, int(r.get('batteries_in_series') or 1))
+        r['total_batteries']       = actual_batt
+        r['batteries_in_parallel'] = max(1, math.ceil(actual_batt / batt_series))
+
+    # --- Financials from the true BoM total ---
+    bom_total = sum(float(b['total']) for b in bom_list)
+    if bom_total > 0:
+        params = {
+            'utility_tariff':    float(s.get('utility_tariff') or 897),
+            'tariff_escalation': float(s.get('tariff_escalation') or 0) / 100,  # DB stores %
+        }
+        r['maintenance_cost_10yr'] = float(r.get('maintenance_cost_10yr') or 0)
+        _recompute_financials(r, bom_total, params)
+    return r
+
+
 def _save_sizing(sid, f):
     """Save sizing + appliances, run calculation, store results. Returns sid."""
     sid        = sid or str(uuid.uuid4())
@@ -1786,7 +1841,9 @@ def solar_view(sid):
     appliances  = query("SELECT * FROM solar_sizing_appliances WHERE sizing_id=%s ORDER BY line_no", (sid,))
     bom         = query("SELECT * FROM solar_sizing_bom WHERE sizing_id=%s ORDER BY line_no", (sid,))
     bom_total   = sum(item["total"] for item in bom)
-    r           = dict(s)   # results are stored on the sizing row
+    # Engineering summary + financial appraisal reflect the actual BoM, not the
+    # stale stored recommendation (see _reconcile_results_with_bom).
+    r           = _reconcile_results_with_bom(s, [dict(b) for b in bom])
     quotation_no = None
     if s["quotation_id"]:
         qt = query_one("SELECT quotation_no FROM quotations WHERE id=%s", (s["quotation_id"],))
@@ -1861,41 +1918,8 @@ def solar_pptx(sid):
     appliances = query("SELECT * FROM solar_sizing_appliances WHERE sizing_id=%s ORDER BY line_no", (sid,))
     bom        = query("SELECT * FROM solar_sizing_bom WHERE sizing_id=%s ORDER BY line_no", (sid,))
     bom_list   = [dict(b) for b in bom]
-    results    = dict(s)
-
-    # Reconcile results with actual BoM quantities so PPTX matches what was quoted.
-    # When the user edits the BoM (e.g. 4 panels instead of 2, 1 battery instead of 2),
-    # the stored calc fields (panels_recommended, total_batteries, annual_yield_kwh, etc.)
-    # are stale. We re-derive everything from the BoM before rendering.
-    panel_row   = next((b for b in bom_list if 'solar panel' in b['description'].lower()), None)
-    battery_row = next((b for b in bom_list if b['description'].lower().startswith('battery')), None)
-
-    if panel_row:
-        actual_panels = int(float(panel_row['qty']))
-        results['panels_recommended'] = actual_panels
-        panel_wp  = float(s.get('panel_wp') or 0)
-        psh       = float(s.get('peak_sun_hours') or 5.5)
-        pr        = float(s.get('performance_ratio') or 0.75)
-        results['annual_yield_kwh'] = round(panel_wp * actual_panels * psh * 365 * pr / 1000, 1)
-
-    if battery_row:
-        actual_batt = int(float(battery_row['qty']))
-        batt_series = int(results.get('batteries_in_series') or 1)
-        results['total_batteries']      = actual_batt
-        results['batteries_in_parallel'] = max(1, round(actual_batt / batt_series))
-
-    bom_total = sum(float(b['total']) for b in bom_list)
-    if bom_total > 0:
-        results['system_cost'] = bom_total
-        annual_yield = results['annual_yield_kwh']
-        utility_tariff  = float(s.get('utility_tariff') or 897)
-        payback_tariff  = float(s.get('payback_tariff') or 882)
-        annual_sav_grid = annual_yield * utility_tariff
-        maint           = float(results.get('maintenance_cost_10yr') or 0)
-        results['yaka_savings_10yr']  = round(annual_yield * 10 * utility_tariff - bom_total - maint, 0)
-        results['solar_cost_per_kwh'] = round(bom_total / (annual_yield * 10), 0) if annual_yield > 0 else 0
-        results['payback_years']      = round(bom_total / (annual_yield * payback_tariff), 2) if annual_yield > 0 else 0
-
+    # Same reconciliation the detail page uses, so the proposal matches the BoM.
+    results    = _reconcile_results_with_bom(s, bom_list)
     pptx_bytes = build_proposal(dict(s), results, [dict(a) for a in appliances], bom_list)
     safe_name  = s["client_name"].replace(" ", "_").replace("/", "-")
     return send_file(

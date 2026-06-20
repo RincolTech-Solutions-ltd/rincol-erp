@@ -160,11 +160,27 @@ def calc_sizing(params, appliances):
 
     strings_total = strings_by_energy
     if max_total_strings < 999 and strings_total > max_total_strings:
-        panel_array_flags.append(
-            f"Array needs {strings_total} strings but inverter supports max {max_total_strings} "
-            f"({mppt_trackers} tracker(s) × {max_strings_per_tracker} strings each at {max_input_current_per_tracker}A/tracker). "
-            f"Consider larger inverter or reducing load.")
-        strings_total = max_total_strings
+        # Current-limited on parallel strings. Before warning, pack more panels
+        # into each series string (within the MPPT max-voltage / OC headroom)
+        # so the array still meets the energy requirement with fewer strings.
+        # e.g. a 1-string inverter with a 60–450V MPPT window can take 4×48.7V
+        # panels in series (4S × 1P) instead of being capped under-spec at 2.
+        capped_strings = max_total_strings
+        series_ceiling = panels_in_series
+        if mppt_max_v > 0 and panel_vmpp > 0:
+            series_ceiling = math.floor(mppt_max_v / panel_vmpp)
+        if max_oc_v > 0 and panel_voc > 0:
+            series_ceiling = min(series_ceiling, math.floor(max_oc_v / panel_voc))
+        needed_series    = math.ceil(panels_by_energy / capped_strings)
+        panels_in_series = max(panels_in_series, min(needed_series, series_ceiling))
+        strings_total    = capped_strings
+        # Only warn if even after series-packing the array still falls short
+        if panels_in_series * strings_total < panels_by_energy:
+            panel_array_flags.append(
+                f"Array needs {strings_by_energy} strings but inverter supports max {max_total_strings} "
+                f"({mppt_trackers} tracker(s) × {max_strings_per_tracker} strings each at {max_input_current_per_tracker}A/tracker), "
+                f"and series voltage headroom caps at {series_ceiling}S per string. "
+                f"Consider a larger inverter or reducing load.")
 
     strings_per_tracker = math.ceil(strings_total / mppt_trackers)
     panels_recommended  = panels_in_series * strings_total
