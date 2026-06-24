@@ -60,6 +60,7 @@ def _dm(person: str, text: str, keyboard=None):
 def _sg_send(to: list, subject: str, html_body: str, attachments: list = None):
     """Send via SendGrid Web API. attachments = [{"filename": "x.pdf", "content": base64str}]"""
     if not _SG_KEY:
+        print(f"[EMAIL] SKIP — SENDGRID_API_KEY not set. Would have sent to {to}: {subject}", flush=True)
         return
     body = {
         "personalizations": [{"to": [{"email": e} for e in to]}],
@@ -73,14 +74,19 @@ def _sg_send(to: list, subject: str, html_body: str, attachments: list = None):
             for a in attachments
         ]
     try:
-        requests.post(
+        print(f"[EMAIL] Sending to {to}: {subject}", flush=True)
+        r = requests.post(
             "https://api.sendgrid.com/v3/mail/send",
             headers={"Authorization": f"Bearer {_SG_KEY}", "Content-Type": "application/json"},
             json=body,
             timeout=15,
         )
-    except Exception:
-        pass
+        if r.status_code == 202:
+            print(f"[EMAIL] OK 202 — delivered to SendGrid for {to}", flush=True)
+        else:
+            print(f"[EMAIL] ERROR {r.status_code} — {r.text[:300]}", flush=True)
+    except Exception as e:
+        print(f"[EMAIL] EXCEPTION sending to {to}: {e}", flush=True)
 
 
 def _send_email(subject: str, html_body: str):
@@ -277,7 +283,9 @@ def notify_quotation(record: dict, action: str = "created", pdf_bytes: bytes = N
 def _send_quotation_to_customer(qno: str, client: str, amount: float,
                                  customer_email: str, pdf_bytes: bytes,
                                  status: str = "Pending"):
+    print(f"[QUOT-EMAIL] Preparing {qno} for {customer_email} (status={status}, pdf={len(pdf_bytes or b'')} bytes)", flush=True)
     if not _SG_KEY:
+        print(f"[QUOT-EMAIL] SKIP — no SG key", flush=True)
         return
     if status == "Approved":
         subject    = f"Approved Quotation {qno} — Rincol Tech Solutions Ltd"

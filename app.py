@@ -283,18 +283,24 @@ def _save_quotation(qid):
         # Build PDF whenever status is Pending or Approved — customer will receive it
         pdf_bytes = None
         customer_email = (saved_q.get("customer_email") or "").strip()
+        qno_log = saved_q.get("quotation_no", qid)
         if saved_q.get("status") in ("Pending", "Approved") and customer_email:
+            print(f"[QUOT] {qno_log} status={saved_q.get('status')} — building PDF for {customer_email}", flush=True)
             try:
                 saved_items = query("SELECT * FROM quotation_items WHERE quotation_id=%s ORDER BY line_no", (qid,))
                 pdf_bytes   = build_quotation_pdf(dict(saved_q), [dict(i) for i in saved_items],
                                                   sig_bytes=_load_default_sig())
-            except Exception:
+                print(f"[QUOT] PDF built OK ({len(pdf_bytes)} bytes)", flush=True)
+            except Exception as _pdf_err:
+                print(f"[QUOT] PDF build FAILED: {_pdf_err}", flush=True)
                 pdf_bytes = None
             customer_name = (saved_q.get("customer_name") or "").strip()
             if pdf_bytes:
                 flash(f"📎 Quotation PDF sent to {customer_name} &lt;{customer_email}&gt;.", "info")
             else:
                 flash(f"⚠️ PDF generation failed — quotation was NOT emailed to {customer_name} ({customer_email}).", "warning")
+        elif saved_q.get("status") in ("Pending", "Approved") and not customer_email:
+            print(f"[QUOT] {qno_log} status={saved_q.get('status')} — no customer email, skipping PDF", flush=True)
         notify_quotation(dict(saved_q), action="created" if _is_new else "updated",
                          pdf_bytes=pdf_bytes)
         if saved_q.get("status") == "Approved":
