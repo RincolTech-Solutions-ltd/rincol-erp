@@ -249,7 +249,8 @@ def _save_quotation(qid):
     vat_amt   = subtotal * vat_rate / 100 if vat_rate else 0
     grand     = round(subtotal + vat_amt, 2)
 
-    customer_id = f.get("customer_id") or None
+    _cid = f.get("customer_id", "").strip()
+    customer_id = _cid if _cid and _cid != "None" else None
 
     execute("""
         INSERT INTO quotations (id, quotation_no, date, title, customer_name, customer_phone,

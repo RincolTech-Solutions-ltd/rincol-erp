@@ -87,7 +87,7 @@ window.CATALOG_ITEMS = {{ catalog | tojson }};
           </div>
         </div>
         <hr class="my-2">
-        <input type="hidden" name="customer_id" id="customerIdInput" value="{{ q.customer_id if q else '' }}">
+        <input type="hidden" name="customer_id" id="customerIdInput" value="{{ (q.customer_id or '') if q else '' }}">
         <div class="mb-2">
           <label class="form-label">Name *</label>
           <input type="text" name="customer_name" id="custName" class="form-control form-control-sm" required
