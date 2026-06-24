@@ -184,18 +184,14 @@ tr.dragging { opacity: 0.35; }
   backdrop-filter: blur(2px);
 }
 
-/* ── Catalog picker (quotation form) ─────────────────────────────────────── */
-.catalog-picker {
-  font-size: 0.7rem;
-  padding: 1px 4px;
-  height: auto;
-  background: #1e2130;
-  color: #9ca3af;
-  border-color: #2a2d45;
-  border-radius: 4px;
-  cursor: pointer;
+/* ── Markup sub-line in price cell ───────────────────────────────────────── */
+.col-markup {
+  font-size: 0.65rem;
+  text-align: right;
+  line-height: 1.2;
+  margin-top: 1px;
+  letter-spacing: 0.01em;
 }
-.catalog-picker:focus { border-color: var(--accent-blue); outline: none; color: #e2e8f0; }
 
 /* ── Mobile responsive ───────────────────────────────────────────────────── */
 @media (max-width: 767px) {

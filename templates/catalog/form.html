@@ -50,13 +50,20 @@
           </div>
           <div class="col-4">
             <label class="form-label">Buy Price (UGX)</label>
-            <input type="number" name="buy_price" class="form-control form-control-sm" min="0"
-                   value="{{ item.buy_price if item else 0 }}">
+            <input type="text" inputmode="numeric" name="buy_price" id="buy_price"
+                   class="form-control form-control-sm money-input"
+                   value="{{ '{:,.0f}'.format(item.buy_price or 0) if item else '' }}">
           </div>
           <div class="col-4">
             <label class="form-label">Sell Price (UGX)</label>
-            <input type="number" name="sell_price" class="form-control form-control-sm" min="0"
-                   value="{{ item.sell_price if item else 0 }}">
+            <input type="text" inputmode="numeric" name="sell_price" id="sell_price"
+                   class="form-control form-control-sm money-input"
+                   value="{{ '{:,.0f}'.format(item.sell_price or 0) if item else '' }}">
+          </div>
+          <div class="col-4">
+            <label class="form-label">Markup</label>
+            <div id="markup-display" class="form-control form-control-sm text-center bg-transparent"
+                 style="border-color:rgba(255,255,255,.1)">—</div>
           </div>
           <div class="col-8">
             <label class="form-label">Supplier</label>
@@ -286,7 +293,24 @@ function showSpecs(cat) {
   const target = document.getElementById('specs-' + cat);
   if (target) target.style.display = '';
 }
-// Run on page load with current category
 showSpecs(document.getElementById('category').value);
+
+(function () {
+  var buyIn  = document.getElementById('buy_price');
+  var sellIn = document.getElementById('sell_price');
+  var disp   = document.getElementById('markup-display');
+  function calc() {
+    var buy  = parseFloat((buyIn.value  || '').replace(/,/g, '')) || 0;
+    var sell = parseFloat((sellIn.value || '').replace(/,/g, '')) || 0;
+    if (!buy || !sell) { disp.textContent = '—'; disp.style.color = ''; return; }
+    var val  = sell - buy;
+    var pct  = (val / buy * 100).toFixed(1);
+    disp.textContent = (val >= 0 ? '+' : '') + Math.round(val).toLocaleString('en-US') + '  (' + pct + '%)';
+    disp.style.color = val >= 0 ? '#a6e3a1' : '#f87171';
+  }
+  buyIn.addEventListener('input', calc);
+  sellIn.addEventListener('input', calc);
+  calc();
+})();
 </script>
 {% endblock %}

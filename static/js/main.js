@@ -17,11 +17,12 @@ function fmt(n) {
 (function () {
   function formatMoney(val) {
     // Allow digits and one decimal point only
-    const raw = val.replace(/[^0-9.]/g, '');
+    const raw = String(val).replace(/[^0-9.]/g, '');
     const parts = raw.split('.');
     parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
     return parts.slice(0, 2).join(parts.length > 1 ? '.' : '');
   }
+  window.formatMoney = formatMoney;
 
   function applyFormatter(el) {
     el.addEventListener('input', function () {
@@ -100,12 +101,13 @@ function initColResize(tableId) {
   let rowIndex = tbody.querySelectorAll('tr').length;
 
   function recalcRow(row) {
-    const qty   = parseFloat(row.querySelector('.col-qty').value)   || 0;
-    const price = parseFloat(row.querySelector('.col-price').value) || 0;
+    const qty   = parseFloat(row.querySelector('.col-qty').value) || 0;
+    const price = parseFloat((row.querySelector('.col-price').value || '').replace(/,/g, '')) || 0;
     const total = qty * price;
     const totalEl = row.querySelector('.col-total');
     totalEl.textContent = fmt(total);
     totalEl.dataset.value = total;
+    updateMarkup(row, price);
   }
 
   function recalcAll() {
@@ -162,69 +164,86 @@ function initColResize(tableId) {
     }
   }
 
-  // ── Catalog picker ─────────────────────────────────────────────────────────
-  function buildCatalogSelect() {
-    const catalog = window.CATALOG_ITEMS || [];
-    const sel = document.createElement('select');
-    sel.className = 'catalog-picker form-select form-select-sm mt-1';
-    sel.title = 'Fill from catalog';
-    // Blank/placeholder option
-    const blank = document.createElement('option');
-    blank.value = '';
-    blank.textContent = '📦 From catalog…';
-    sel.appendChild(blank);
-    // Group by category
-    const groups = {};
-    catalog.forEach(item => {
-      const cat = item.category || 'Other';
-      if (!groups[cat]) groups[cat] = [];
-      groups[cat].push(item);
-    });
-    Object.keys(groups).sort().forEach(cat => {
-      const og = document.createElement('optgroup');
-      og.label = cat;
-      groups[cat].forEach(item => {
-        const opt = document.createElement('option');
-        opt.value = item.id;
-        const label = item.name + (item.spec ? ' — ' + item.spec : '');
-        opt.textContent = label;
-        opt.dataset.name  = item.name;
-        opt.dataset.spec  = item.spec || '';
-        opt.dataset.uom   = item.uom || 'pc';
-        opt.dataset.price = item.sell_price || 0;
-        og.appendChild(opt);
-      });
-      sel.appendChild(og);
-    });
-    return sel;
+  // ── Markup helper ─────────────────────────────────────────────────────────
+  function updateMarkup(tr, sellPrice) {
+    const mkDiv = tr.querySelector('.col-markup');
+    if (!mkDiv) return;
+    const buy = parseFloat(tr.dataset.buyPrice || 0);
+    if (!buy || !sellPrice) { mkDiv.textContent = ''; return; }
+    const val = sellPrice - buy;
+    const pct = (val / buy * 100).toFixed(0);
+    mkDiv.textContent = (val >= 0 ? '+' : '') + fmt(val) + ' (' + pct + '%)';
+    mkDiv.style.color = val >= 0 ? '#a6e3a1' : '#f87171';
   }
 
-  function addCatalogPicker(tr) {
-    if (!(window.CATALOG_ITEMS && window.CATALOG_ITEMS.length)) return;
-    const descTd = tr.querySelectorAll('td')[1];
-    if (!descTd || descTd.querySelector('.catalog-picker')) return;
-    const sel = buildCatalogSelect();
-    descTd.appendChild(sel);
-    sel.addEventListener('change', () => {
-      const opt = sel.options[sel.selectedIndex];
-      if (!opt || !opt.value) return;
-      const descIn  = tr.querySelector('.col-desc');
+  // ── Catalog autocomplete on description field ──────────────────────────────
+  function addDescAutocomplete(tr) {
+    const catalog = window.CATALOG_ITEMS || [];
+    if (!catalog.length) return;
+    const descIn = tr.querySelector('.col-desc');
+    if (!descIn || descIn.dataset.acWired) return;
+    descIn.dataset.acWired = '1';
+
+    const dropdown = document.createElement('div');
+    dropdown.style.cssText = [
+      'position:absolute', 'z-index:9999', 'background:#1e293b',
+      'border:1px solid #334155', 'border-radius:6px',
+      'max-height:200px', 'overflow-y:auto', 'min-width:260px',
+      'box-shadow:0 8px 24px rgba(0,0,0,.5)', 'display:none',
+    ].join(';');
+    document.body.appendChild(dropdown);
+
+    function reposition() {
+      const r = descIn.getBoundingClientRect();
+      dropdown.style.top  = (r.bottom + window.scrollY + 2) + 'px';
+      dropdown.style.left = r.left + 'px';
+      dropdown.style.width = Math.max(r.width, 260) + 'px';
+    }
+
+    function fillFromItem(item) {
+      descIn.value = item.name + (item.spec ? ' — ' + item.spec : '');
+      tr.dataset.buyPrice = String(item.buy_price || 0);
       const uomSel  = tr.querySelector('.col-uom');
       const priceIn = tr.querySelector('.col-price');
-      const fullName = opt.dataset.name + (opt.dataset.spec ? ' ' + opt.dataset.spec : '');
-      if (descIn)  descIn.value  = fullName;
-      if (priceIn) { priceIn.value = opt.dataset.price; priceIn.dispatchEvent(new Event('input')); }
-      // Set UOM if the option exists
       if (uomSel) {
-        const uomVal = opt.dataset.uom;
         for (let i = 0; i < uomSel.options.length; i++) {
-          if (uomSel.options[i].value === uomVal) { uomSel.selectedIndex = i; break; }
+          if (uomSel.options[i].value === item.uom) { uomSel.selectedIndex = i; break; }
         }
         uomSel.dispatchEvent(new Event('change'));
       }
-      // Reset picker to placeholder
-      sel.selectedIndex = 0;
+      if (priceIn) {
+        priceIn.value = window.formatMoney(String(item.sell_price || 0));
+        priceIn.dispatchEvent(new Event('input'));
+      }
+      dropdown.style.display = 'none';
+    }
+
+    function showMatches(q) {
+      const matches = catalog.filter(item => {
+        return (item.name + ' ' + (item.spec || '')).toLowerCase().includes(q);
+      }).slice(0, 12);
+      if (!matches.length) { dropdown.style.display = 'none'; return; }
+      dropdown.innerHTML = matches.map((item, i) => {
+        const label = item.name + (item.spec ? '<span style="color:#94a3b8"> — ' + item.spec + '</span>' : '');
+        const price = '<span style="float:right;color:#a6e3a1">' + fmt(item.sell_price || 0) + '</span>';
+        return '<div class="ac-item" data-idx="' + i + '" style="padding:6px 10px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.05);font-size:.82rem">' + label + price + '</div>';
+      }).join('');
+      reposition();
+      dropdown.style.display = '';
+      dropdown.querySelectorAll('.ac-item').forEach(el => {
+        el.addEventListener('mousedown', e => { e.preventDefault(); fillFromItem(matches[+el.dataset.idx]); });
+        el.addEventListener('mouseenter', () => { el.style.background = 'rgba(255,255,255,.07)'; });
+        el.addEventListener('mouseleave', () => { el.style.background = ''; });
+      });
+    }
+
+    descIn.addEventListener('input', function () {
+      const q = this.value.toLowerCase().trim();
+      if (q.length >= 2) showMatches(q);
+      else dropdown.style.display = 'none';
     });
+    descIn.addEventListener('blur', () => setTimeout(() => { dropdown.style.display = 'none'; }, 180));
+    window.addEventListener('scroll', reposition, { passive: true });
   }
 
   function makeRow(data = {}) {
@@ -239,7 +258,7 @@ function initColResize(tableId) {
       <td class="td-desc"><input type="text" name="desc[]" class="col-desc" value="${escHtml(data.description||data.desc||'')}"></td>
       <td class="td-uom"><select name="uom[]" class="col-uom">${uomOptions}</select></td>
       <td class="td-qty"><input type="number" name="qty[]" class="col-qty" value="${data.qty||1}" min="0.01" step="any"></td>
-      <td class="td-price"><input type="number" name="price[]" class="col-price" value="${data.unit_price||data.price||0}" min="0" step="any"></td>
+      <td class="td-price"><input type="text" inputmode="numeric" name="price[]" class="col-price money-input" value="${window.formatMoney(String(data.unit_price||data.price||0))}"><div class="col-markup"></div></td>
       <td class="col-total td-total" data-value="${(data.qty||1)*(data.unit_price||0)}">${fmt((data.qty||1)*(data.unit_price||0))}</td>
       <td class="td-delete text-center">
         <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1 remove-row-btn" title="Remove">
@@ -259,7 +278,8 @@ function initColResize(tableId) {
     uomSel.addEventListener('change',  () => { lockQtyIfLot(tr); recalcRow(tr); recalcAll(); });
     rmBtn.addEventListener('click',    () => { tr.remove(); recalcAll(); });
 
-    addCatalogPicker(tr);
+    if (data.buy_price != null) tr.dataset.buyPrice = String(data.buy_price);
+    addDescAutocomplete(tr);
     lockQtyIfLot(tr);
     return tr;
   }
@@ -286,7 +306,16 @@ function initColResize(tableId) {
     priceIn?.addEventListener('input',  () => { recalcRow(tr); recalcAll(); });
     uomSel?.addEventListener('change',  () => { lockQtyIfLot(tr); recalcRow(tr); recalcAll(); });
     rmBtn?.addEventListener('click',    () => { tr.remove(); recalcAll(); });
-    addCatalogPicker(tr);
+    // Look up buy price from catalog for markup display
+    const descVal = tr.querySelector('.col-desc')?.value || '';
+    if (descVal && window.CATALOG_ITEMS) {
+      const match = window.CATALOG_ITEMS.find(item => {
+        const full = item.name + (item.spec ? ' — ' + item.spec : '');
+        return descVal === full || descVal.startsWith(item.name);
+      });
+      if (match) tr.dataset.buyPrice = String(match.buy_price || 0);
+    }
+    addDescAutocomplete(tr);
     lockQtyIfLot(tr);
     recalcRow(tr);
   });

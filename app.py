@@ -181,7 +181,7 @@ def quotations_list():
 @login_required
 def quotations_new():
     templates = query("SELECT id, name FROM system_templates ORDER BY sort_order")
-    catalog   = query("SELECT id, category, name, spec, uom, sell_price FROM catalog_items ORDER BY category, name")
+    catalog   = query("SELECT id, category, name, spec, uom, sell_price, buy_price FROM catalog_items ORDER BY category, name")
     if request.method == "POST":
         return _save_quotation(None)
     return render_template("quotation/form.html", q=None, templates=templates, catalog=catalog,
@@ -217,7 +217,7 @@ def quotations_edit(qid):
         return _save_quotation(qid)
     items     = query("SELECT * FROM quotation_items WHERE quotation_id=%s ORDER BY line_no", (qid,))
     templates = query("SELECT id, name FROM system_templates ORDER BY sort_order")
-    catalog   = query("SELECT id, category, name, spec, uom, sell_price FROM catalog_items ORDER BY category, name")
+    catalog   = query("SELECT id, category, name, spec, uom, sell_price, buy_price FROM catalog_items ORDER BY category, name")
     return render_template("quotation/form.html", q=q, items=items,
                            templates=templates, catalog=catalog)
 
@@ -863,7 +863,7 @@ def catalog_edit(item_id=None):
                    sell_price=EXCLUDED.sell_price, supplier_id=EXCLUDED.supplier_id,
                    notes=EXCLUDED.notes, spec_data=EXCLUDED.spec_data""",
                 (iid, cat, f["name"], f.get("spec",""), f.get("uom","pc"),
-                 int(f.get("buy_price",0)), int(f.get("sell_price",0)),
+                 int(f.get("buy_price") or 0), int(f.get("sell_price") or 0),
                  f.get("supplier_id",""), f.get("notes",""), json.dumps(spec_data)))
         flash("Item saved.", "success")
         return redirect(url_for("catalog_list"))

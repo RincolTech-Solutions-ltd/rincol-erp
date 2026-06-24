@@ -204,7 +204,7 @@ window.CATALOG_ITEMS = {{ catalog | tojson }};
                     </select>
                   </td>
                   <td class="td-qty"><input type="number" name="qty[]" class="col-qty" value="{{ it.qty }}" min="0.01" step="any"></td>
-                  <td class="td-price"><input type="number" name="price[]" class="col-price" value="{{ it.unit_price }}" min="0" step="any"></td>
+                  <td class="td-price"><input type="text" inputmode="numeric" name="price[]" class="col-price money-input" value="{{ '{:,.0f}'.format(it.unit_price or 0) }}"><div class="col-markup"></div></td>
                   <td class="col-total td-total" data-value="{{ it.total }}">{{ '{:,.0f}'.format(it.total) }}</td>
                   <td class="td-delete text-center">
                     <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1 remove-row-btn"><i class="bi bi-x"></i></button>
@@ -226,7 +226,7 @@ window.CATALOG_ITEMS = {{ catalog | tojson }};
                     </select>
                   </td>
                   <td class="td-qty"><input type="number" name="qty[]" class="col-qty" value="1" min="0.01" step="any"></td>
-                  <td class="td-price"><input type="number" name="price[]" class="col-price" value="0" min="0" step="any"></td>
+                  <td class="td-price"><input type="text" inputmode="numeric" name="price[]" class="col-price money-input" value=""><div class="col-markup"></div></td>
                   <td class="col-total td-total" data-value="0">0</td>
                   <td class="td-delete text-center">
                     <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1 remove-row-btn"><i class="bi bi-x"></i></button>
