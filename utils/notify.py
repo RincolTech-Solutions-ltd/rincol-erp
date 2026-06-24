@@ -277,7 +277,7 @@ def notify_quotation(record: dict, action: str = "created", pdf_bytes: bytes = N
 def _send_quotation_to_customer(qno: str, client: str, amount: float,
                                  customer_email: str, pdf_bytes: bytes,
                                  status: str = "Pending"):
-    if not _RESEND_KEY:
+    if not _SG_KEY:
         return
     if status == "Approved":
         subject    = f"Approved Quotation {qno} — Rincol Tech Solutions Ltd"
@@ -390,7 +390,7 @@ def notify_receipt(record: dict, pdf_bytes: bytes = None):
 
 def _send_receipt_to_customer(rno: str, client: str, paid: float, balance: float,
                                method: str, customer_email: str, pdf_bytes: bytes):
-    if not _RESEND_KEY:
+    if not _SG_KEY:
         return
     bal_note = "Fully settled — thank you!" if balance <= 0 else f"UGX {balance:,.0f} outstanding"
 
@@ -474,7 +474,7 @@ def notify_task(record: dict, action: str = "created"):
 
 def send_customer_statement(customer: dict, stats: dict, pdf_bytes: bytes, statement_url: str):
     """Email a customer their account statement PDF + link to the live statement page."""
-    if not _RESEND_KEY or not customer.get("email"):
+    if not _SG_KEY or not customer.get("email"):
         return
     name    = customer.get("name", "Valued Customer")
     cust_no = customer.get("customer_no", "")
