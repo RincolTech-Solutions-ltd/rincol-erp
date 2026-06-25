@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Supplier Price Lists{% endblock %}
+{% block breadcrumb %}Docs &rsaquo; Price Lists{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h5 class="mb-0">Supplier Price Lists</h5>
+</div>
+
+<div class="card">
+  <div class="card-body p-0">
+    {% if items %}
+    <div class="table-responsive">
+      <table class="table table-hover mb-0 align-middle">
+        <thead>
+          <tr>
+            <th>File</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for f in items %}
+          <tr>
+            <td>
+              <i class="bi bi-file-pdf text-danger me-2"></i>
+              {{ f.name }}
+            </td>
+            <td class="text-end">
+              <a href="{{ f.url }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                <i class="bi bi-eye"></i> View
+              </a>
+              <a href="{{ f.url }}" download class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-download"></i>
+              </a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="p-4 text-center text-muted">No price lists uploaded yet.</div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

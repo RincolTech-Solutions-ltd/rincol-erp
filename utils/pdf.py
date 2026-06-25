@@ -656,3 +656,185 @@ def build_statement_pdf(customer: dict, quotations: list, stats: dict) -> bytes:
 
     doc.build(elems)
     return buf.getvalue()
+
+
+# ── Backup Load Assessment PDF ────────────────────────────────────────────────
+
+def build_backup_sizing_pdf(bs: dict) -> bytes:
+    import datetime as _dt
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4,
+                            topMargin=1.5 * cm, bottomMargin=1.5 * cm,
+                            leftMargin=1.8 * cm, rightMargin=1.8 * cm)
+    W = A4[0] - 3.6 * cm
+    elems = []
+
+    title_s  = _ps("bst",  fontSize=13, fontName="Helvetica-Bold", textColor=WHITE,  alignment=TA_CENTER, spaceBefore=4, spaceAfter=4)
+    sub_s    = _ps("bss",  fontSize=10, fontName="Helvetica",       textColor=WHITE,  alignment=TA_CENTER)
+    hdr_c    = _ps("bshc", fontSize=9,  fontName="Helvetica-Bold",  textColor=WHITE,  alignment=TA_CENTER)
+    hdr_l    = _ps("bshl", fontSize=9,  fontName="Helvetica-Bold",  textColor=WHITE,  alignment=TA_LEFT)
+    hdr_r    = _ps("bshr", fontSize=9,  fontName="Helvetica-Bold",  textColor=WHITE,  alignment=TA_RIGHT)
+    cell_s   = _ps("bsc",  fontSize=9,  fontName="Helvetica",        textColor=BLACK)
+    cell_c   = _ps("bscc", fontSize=9,  fontName="Helvetica",        textColor=BLACK,  alignment=TA_CENTER)
+    cell_r   = _ps("bscr", fontSize=9,  fontName="Helvetica",        textColor=BLACK,  alignment=TA_RIGHT)
+    tot_s    = _ps("bstot",fontSize=9,  fontName="Helvetica-Bold",   textColor=WHITE,  alignment=TA_RIGHT)
+    tot_l    = _ps("bstl", fontSize=9,  fontName="Helvetica-Bold",   textColor=WHITE,  alignment=TA_LEFT)
+    note_s   = _ps("bsn",  fontSize=8,  fontName="Helvetica",        textColor=DGRAY,  leading=13, leftIndent=10)
+    blue_h   = _ps("bsbh", fontSize=10, fontName="Helvetica-Bold",   textColor=BLUE)
+    foot_s   = _ps("bsft", fontSize=7,  fontName="Helvetica",        textColor=colors.HexColor("#888888"), alignment=TA_CENTER)
+    val_s    = _ps("bsval",fontSize=9,  fontName="Helvetica",        textColor=BLACK)
+
+    load_items = bs.get("load_items", [])
+    if isinstance(load_items, str):
+        import json as _json
+        load_items = _json.loads(load_items)
+
+    dod = float(bs.get("dod", 0.80))
+    eff = float(bs.get("inverter_efficiency", 0.90))
+    backup_hours = float(bs.get("backup_hours", 4))
+    total_load_w = sum(float(item.get("qty", 0)) * float(item.get("unit_watts", 0)) for item in load_items)
+    catalog_options = bs.get("catalog_options", [])
+
+    elems.append(_letterhead(W))
+    elems.append(Spacer(1, 4))
+    elems.append(HRFlowable(width="100%", thickness=2, color=BLUE, spaceAfter=6, spaceBefore=4))
+
+    title_tbl = Table([
+        [Paragraph("BACKUP LOAD ASSESSMENT", title_s)],
+        [Paragraph(f"{bs.get('site_ref', '')}   |   {bs.get('customer_name', '')}", sub_s)],
+    ], colWidths=[W])
+    title_tbl.setStyle(TableStyle([
+        ("BACKGROUND",    (0, 0), (-1, -1), DARK),
+        ("TOPPADDING",    (0, 0), (-1, -1), 6),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+    ]))
+    elems.append(title_tbl)
+    elems.append(Spacer(1, 12))
+
+    elems.append(Paragraph("LOAD DECLARATION", blue_h))
+    elems.append(Spacer(1, 4))
+
+    load_data = [[
+        Paragraph("#",             hdr_c),
+        Paragraph("Equipment",     hdr_l),
+        Paragraph("Qty",           hdr_c),
+        Paragraph("Unit (W)",      hdr_r),
+        Paragraph("Total (W)",     hdr_r),
+    ]]
+    for i, item in enumerate(load_items):
+        qty_v  = float(item.get("qty", 0))
+        uw_v   = float(item.get("unit_watts", 0))
+        row_w  = qty_v * uw_v
+        load_data.append([
+            Paragraph(str(i + 1),              cell_c),
+            Paragraph(item.get("description", ""), cell_s),
+            Paragraph(f"{qty_v:g}",             cell_c),
+            Paragraph(f"{uw_v:,.0f}",           cell_r),
+            Paragraph(f"{row_w:,.0f}",          cell_r),
+        ])
+
+    n_load = len(load_data)
+    load_data.append([
+        Paragraph("", tot_s),
+        Paragraph("TOTAL OPERATING LOAD", tot_l),
+        Paragraph("", tot_s),
+        Paragraph("", tot_s),
+        Paragraph(f"{total_load_w:,.0f} W", tot_s),
+    ])
+    tot_row = len(load_data) - 1
+
+    col_w_load = [W * 0.06, W * 0.46, W * 0.12, W * 0.18, W * 0.18]
+    load_tbl = Table(load_data, colWidths=col_w_load, repeatRows=1)
+    load_tbl.setStyle(TableStyle([
+        ("BACKGROUND",    (0, 0),        (-1, 0),        BLUE),
+        ("ROWBACKGROUNDS",(0, 1),        (-1, n_load - 1), [WHITE, LBLUE]),
+        ("BACKGROUND",    (0, tot_row),  (-1, tot_row),  DARK),
+        ("SPAN",          (0, tot_row),  (0, tot_row)),
+        ("BOX",           (0, 0), (-1, -1), 0.5, GREY_LINE),
+        ("INNERGRID",     (0, 0), (-1, -1), 0.3, GREY_LINE),
+        ("TOPPADDING",    (0, 0), (-1, -1), 5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ("LEFTPADDING",   (0, 0), (-1, -1), 6),
+        ("RIGHTPADDING",  (0, 0), (-1, -1), 6),
+        ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
+    ]))
+    elems.append(load_tbl)
+    elems.append(Spacer(1, 14))
+
+    elems.append(Paragraph(f"PRODUCT RECOMMENDATIONS — {backup_hours:g}h BACKUP", blue_h))
+    elems.append(Spacer(1, 4))
+
+    if catalog_options:
+        bat_data = [[
+            Paragraph("Battery",          hdr_l),
+            Paragraph("Units",            hdr_c),
+            Paragraph("Bat. Cost (UGX)",  hdr_r),
+            Paragraph("Inverter",         hdr_l),
+            Paragraph("Inv. Cost (UGX)",  hdr_r),
+            Paragraph("Total (UGX)",      hdr_r),
+            Paragraph("Backup",           hdr_c),
+        ]]
+        for opt in catalog_options:
+            inv_name = (opt.get("inverter") or {}).get("name", "—") if not opt.get("no_inverter") else "No match"
+            bat_data.append([
+                Paragraph(opt.get("battery_name", ""),   cell_s),
+                Paragraph(str(opt.get("units", 0)),       cell_c),
+                Paragraph(f"{opt.get('bat_cost', 0):,.0f}", cell_r),
+                Paragraph(inv_name,                       cell_s),
+                Paragraph(f"{opt.get('inv_cost', 0):,.0f}", cell_r),
+                Paragraph(f"{opt.get('total_cost', 0):,.0f}", cell_r),
+                Paragraph(opt.get("backup_str", ""),      cell_c),
+            ])
+        n_bat = len(bat_data)
+        col_w_bat = [W * 0.20, W * 0.07, W * 0.14, W * 0.20, W * 0.13, W * 0.13, W * 0.13]
+        bat_tbl = Table(bat_data, colWidths=col_w_bat, repeatRows=1)
+        bat_tbl.setStyle(TableStyle([
+            ("BACKGROUND",    (0, 0), (-1, 0),         BLUE),
+            ("BACKGROUND",    (0, 1), (-1, 1),         colors.HexColor("#e8fce8")),
+            ("ROWBACKGROUNDS",(0, 2), (-1, n_bat - 1), [WHITE, LBLUE]),
+            ("BOX",           (0, 0), (-1, -1),         0.5, GREY_LINE),
+            ("INNERGRID",     (0, 0), (-1, -1),         0.3, GREY_LINE),
+            ("TOPPADDING",    (0, 0), (-1, -1),         4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1),         4),
+            ("LEFTPADDING",   (0, 0), (-1, -1),         5),
+            ("RIGHTPADDING",  (0, 0), (-1, -1),         5),
+            ("VALIGN",        (0, 0), (-1, -1),         "MIDDLE"),
+            ("FONTSIZE",      (0, 1), (-1, -1),         8),
+        ]))
+        elems.append(bat_tbl)
+    else:
+        elems.append(Paragraph("No catalog products available.", note_s))
+
+    elems.append(Spacer(1, 4))
+    elems.append(Paragraph(
+        f"Assumptions: LiFePO4 @ {int(dod * 100)}% DoD, inverter efficiency {int(eff * 100)}%. "
+        f"Ranked by total system cost. First row is best value.",
+        note_s,
+    ))
+    elems.append(Spacer(1, 10))
+
+    inv_kva = bs.get("recommended_kva") or bs.get("inverter_kva")
+    if inv_kva:
+        elems.append(Paragraph(f"Minimum Recommended Inverter: {inv_kva} (based on load + 25% surge headroom)", val_s))
+        elems.append(Spacer(1, 8))
+
+    notes = (bs.get("notes") or "").strip()
+    if notes:
+        note_block = [Paragraph("<b>Notes</b>", blue_h), Spacer(1, 4)]
+        for line in notes.splitlines():
+            line = line.strip()
+            if line:
+                note_block.append(Paragraph(line, note_s))
+        elems.append(KeepTogether(note_block))
+        elems.append(Spacer(1, 10))
+
+    elems.append(HRFlowable(width="100%", thickness=1, color=BLUE, spaceBefore=8, spaceAfter=4))
+    today_str = _dt.date.today().strftime("%-d %B %Y")
+    elems.append(Paragraph(
+        f"Prepared by Rincol Tech Solutions Ltd  |  {today_str}",
+        foot_s,
+    ))
+
+    doc.build(elems)
+    return buf.getvalue()
+

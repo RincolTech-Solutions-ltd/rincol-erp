@@ -21,7 +21,7 @@ SUPABASE_KEY  = os.environ["SUPABASE_ANON_KEY"]
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 from utils.db import query, query_one, execute, next_quotation_number, close_db
-from utils.pdf import build_quotation_pdf, build_receipt_pdf, build_statement_pdf
+from utils.pdf import build_quotation_pdf, build_receipt_pdf, build_statement_pdf, build_backup_sizing_pdf
 from utils.notify import (notify_maintenance, notify_quotation,
                            notify_quotation_status, notify_receipt,
                            notify_task, notify_settlement, notify_balancing_job,
@@ -202,9 +202,10 @@ def quotations_view(qid):
     _default_executors = ['Hillary', 'Dennis']
     _extra_exec = query("SELECT DISTINCT executor_name FROM job_executions WHERE executor_name IS NOT NULL AND executor_name != '' ORDER BY executor_name")
     executor_names = list(dict.fromkeys(_default_executors + [r['executor_name'] for r in _extra_exec if r['executor_name'] not in _default_executors]))
+    backup_sz = query_one("SELECT * FROM backup_sizing WHERE quotation_id=%s ORDER BY created_at DESC LIMIT 1", (qid,))
     return render_template("quotation/view.html", q=q, items=items,
                            receipts=receipts, execs=execs, paid=paid, balance=balance,
-                           executor_names=executor_names)
+                           executor_names=executor_names, backup_sz=backup_sz)
 
 
 @app.route("/quotations/<qid>/edit", methods=["GET", "POST"])
@@ -1948,6 +1949,283 @@ def solar_delete(sid):
     execute("DELETE FROM solar_sizings WHERE id=%s", (sid,))
     flash("Sizing deleted.", "info")
     return redirect(url_for("solar_list"))
+
+
+# ── Backup Sizing ─────────────────────────────────────────────────────────────
+
+def _parse_backup_form(form):
+    descs  = form.getlist("desc[]")
+    qtys   = form.getlist("qty[]")
+    watts  = form.getlist("watts[]")
+    load_items = []
+    for d, q_v, w in zip(descs, qtys, watts):
+        if d.strip():
+            load_items.append({
+                "description": d.strip(),
+                "qty": float(q_v or 0),
+                "unit_watts": float(w or 0),
+            })
+
+    quotation_id = form.get("quotation_id", "").strip() or None
+    return {
+        "site_ref":            form.get("site_ref", "").strip(),
+        "customer_name":       form.get("customer_name", "").strip(),
+        "quotation_id":        quotation_id,
+        "backup_hours":        float(form.get("backup_hours") or 4),
+        "dod":                 float(form.get("dod", 0.80)),
+        "inverter_efficiency": float(form.get("inverter_efficiency", 0.90)),
+        "notes":               form.get("notes", "").strip() or None,
+        "load_items":          json.dumps(load_items),
+    }
+
+
+# (kW equivalent, display label) — sorted ascending; 24V preferred at 1.6kW level
+_INVERTER_STD_SIZES = [
+    (0.70, "700VA / 12V"),
+    (1.10, "1,100VA / 12V"),
+    (1.20, "1,200VA / 12V"),
+    (1.50, "1.5kW / 12V"),
+    (1.60, "1,600VA / 24V"),
+    (3.00, "3kW / 24V"),
+    (3.30, "3.3kW / 24V"),
+    (5.00, "5kW / 48V"),
+    (6.00, "6kW / 48V"),
+    (10.0, "10kW / 48V"),
+    (12.0, "12kW / 48V"),
+]
+
+def _recommend_inverter_kva(total_load_w):
+    min_kw = (total_load_w / 1000) * 1.25
+    for kw, label in _INVERTER_STD_SIZES:
+        if kw >= min_kw:
+            return label
+    return f"{round(min_kw, 1)}kW (custom)"
+
+
+def _bus_voltage(bat_v):
+    if bat_v <= 14:
+        return 12
+    if bat_v <= 28:
+        return 24
+    return 48
+
+
+def _backup_battery_results(bs):
+    import math as _math
+    load_items = bs.get("load_items", [])
+    if isinstance(load_items, str):
+        load_items = json.loads(load_items)
+
+    dod          = float(bs.get("dod", 0.80))
+    eff          = float(bs.get("inverter_efficiency", 0.90))
+    backup_hours = float(bs.get("backup_hours", 4))
+    total_load_w = sum(float(i.get("qty", 0)) * float(i.get("unit_watts", 0)) for i in load_items)
+
+    if total_load_w <= 0:
+        return [], load_items, 0, None
+
+    min_inv_kw = (total_load_w / 1000) * 1.25
+
+    batteries = query("""
+        SELECT id, name, spec, sell_price, spec_data
+        FROM catalog_items
+        WHERE category = 'Battery' AND spec_data IS NOT NULL
+        ORDER BY sell_price
+    """)
+    inverters = query("""
+        SELECT id, name, spec, sell_price, spec_data
+        FROM catalog_items
+        WHERE category = 'Inverter' AND spec_data IS NOT NULL
+        ORDER BY sell_price
+    """)
+
+    options = []
+    for bat in batteries:
+        sd      = bat.get("spec_data") or {}
+        ah      = float(sd.get("ah", 0))
+        bat_v   = float(sd.get("voltage", 0))
+        bat_dod = float(sd.get("dod_rated", dod))
+        max_par = int(sd.get("max_parallel", 16))
+        if ah <= 0 or bat_v <= 0:
+            continue
+
+        bus_v         = _bus_voltage(bat_v)
+        capacity_wh   = ah * bat_v
+        usable_wh     = capacity_wh * bat_dod * eff
+        if usable_wh <= 0:
+            continue
+
+        units_needed  = _math.ceil((total_load_w * backup_hours) / usable_wh)
+        if units_needed > max_par:
+            continue
+
+        actual_h_dec  = (units_needed * usable_wh) / total_load_w
+        h, m          = int(actual_h_dec), int((actual_h_dec % 1) * 60)
+        bat_cost       = units_needed * (bat.get("sell_price") or 0)
+
+        matching_inv = next(
+            (inv for inv in inverters
+             if _bus_voltage(float((inv.get("spec_data") or {}).get("battery_voltage", 0))) == bus_v
+             and float((inv.get("spec_data") or {}).get("inverter_kw", 0)) >= min_inv_kw),
+            None
+        )
+        inv_cost   = (matching_inv.get("sell_price") or 0) if matching_inv else 0
+        total_cost = bat_cost + inv_cost
+
+        options.append({
+            "battery_name": bat["name"],
+            "battery_spec": bat.get("spec", ""),
+            "units":        units_needed,
+            "bat_cost":     bat_cost,
+            "inverter":     matching_inv,
+            "inv_cost":     inv_cost,
+            "total_cost":   total_cost,
+            "backup_str":   f"{h}h {m:02d}min",
+            "bus_v":        bus_v,
+            "no_inverter":  matching_inv is None,
+        })
+
+    options.sort(key=lambda x: x["total_cost"])
+    recommended_kva = _recommend_inverter_kva(total_load_w)
+    return options, load_items, total_load_w, recommended_kva
+
+
+@app.route("/backup-sizing")
+@login_required
+def backup_sizing_list():
+    rows = query("""
+        SELECT bs.*, q.quotation_no
+        FROM backup_sizing bs
+        LEFT JOIN quotations q ON q.id = bs.quotation_id
+        ORDER BY bs.created_at DESC
+    """)
+    enriched = []
+    for row in rows:
+        load_items = row.get("load_items", [])
+        if isinstance(load_items, str):
+            load_items = json.loads(load_items)
+        total_w = sum(float(i.get("qty", 0)) * float(i.get("unit_watts", 0)) for i in load_items)
+        enriched.append(dict(row) | {"total_load_w": total_w})
+    return render_template("backup_sizing/list.html", rows=enriched)
+
+
+@app.route("/backup-sizing/new", methods=["GET", "POST"])
+@login_required
+def backup_sizing_new():
+    if request.method == "POST":
+        data = _parse_backup_form(request.form)
+        bid = str(uuid.uuid4())
+        execute("""
+            INSERT INTO backup_sizing
+                (id, quotation_id, site_ref, customer_name, load_items,
+                 backup_hours, dod, inverter_efficiency, notes)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+        """, (
+            bid,
+            data["quotation_id"],
+            data["site_ref"],
+            data["customer_name"],
+            data["load_items"],
+            data["backup_hours"],
+            data["dod"],
+            data["inverter_efficiency"],
+            data["notes"],
+        ))
+        flash("Backup sizing saved.", "success")
+        return redirect(url_for("backup_sizing_view", bid=bid))
+    quotations = query("SELECT id, quotation_no, customer_name FROM quotations ORDER BY created_at DESC")
+    prefill_qid = request.args.get("quotation_id", "")
+    return render_template("backup_sizing/form.html", bs=None,
+                           quotations=quotations, prefill_qid=prefill_qid)
+
+
+@app.route("/backup-sizing/<bid>")
+@login_required
+def backup_sizing_view(bid):
+    bs = query_one("SELECT bs.*, q.quotation_no FROM backup_sizing bs LEFT JOIN quotations q ON q.id = bs.quotation_id WHERE bs.id=%s", (bid,))
+    if not bs:
+        abort(404)
+    battery_results, load_items, total_load_w, recommended_kva = _backup_battery_results(bs)
+    return render_template("backup_sizing/view.html", bs=bs,
+                           load_items=load_items,
+                           battery_results=battery_results,
+                           total_load_w=total_load_w,
+                           recommended_kva=recommended_kva)
+
+
+@app.route("/backup-sizing/<bid>/edit", methods=["GET", "POST"])
+@login_required
+def backup_sizing_edit(bid):
+    bs = query_one("SELECT * FROM backup_sizing WHERE id=%s", (bid,))
+    if not bs:
+        abort(404)
+    if request.method == "POST":
+        data = _parse_backup_form(request.form)
+        execute("""
+            UPDATE backup_sizing SET
+                quotation_id=%s, site_ref=%s, customer_name=%s,
+                load_items=%s, backup_hours=%s,
+                dod=%s, inverter_efficiency=%s, notes=%s,
+                updated_at=NOW()
+            WHERE id=%s
+        """, (
+            data["quotation_id"],
+            data["site_ref"],
+            data["customer_name"],
+            data["load_items"],
+            data["backup_hours"],
+            data["dod"],
+            data["inverter_efficiency"],
+            data["notes"],
+            bid,
+        ))
+        flash("Backup sizing updated.", "success")
+        return redirect(url_for("backup_sizing_view", bid=bid))
+    quotations = query("SELECT id, quotation_no, customer_name FROM quotations ORDER BY created_at DESC")
+    load_items = bs.get("load_items", [])
+    if isinstance(load_items, str):
+        load_items = json.loads(load_items)
+    return render_template("backup_sizing/form.html", bs=bs,
+                           quotations=quotations, prefill_qid="",
+                           load_items=load_items)
+
+
+@app.route("/backup-sizing/<bid>/delete", methods=["POST"])
+@login_required
+def backup_sizing_delete(bid):
+    execute("DELETE FROM backup_sizing WHERE id=%s", (bid,))
+    flash("Backup sizing deleted.", "info")
+    return redirect(url_for("backup_sizing_list"))
+
+
+@app.route("/backup-sizing/<bid>/pdf")
+@login_required
+def backup_sizing_pdf(bid):
+    bs = query_one("SELECT * FROM backup_sizing WHERE id=%s", (bid,))
+    if not bs:
+        abort(404)
+    bs_dict = dict(bs)
+    catalog_options, _, _, rec_kva = _backup_battery_results(bs_dict)
+    bs_dict["recommended_kva"] = rec_kva
+    bs_dict["catalog_options"] = catalog_options
+    pdf_bytes = build_backup_sizing_pdf(bs_dict)
+    safe = (bs.get("site_ref") or "backup").replace(" ", "_").replace("/", "-")
+    return send_file(
+        io.BytesIO(pdf_bytes),
+        download_name=f"Backup_Assessment_{safe}.pdf",
+        as_attachment=True,
+        mimetype="application/pdf",
+    )
+
+
+@app.route("/docs/pricelists")
+@login_required
+def pricelists():
+    import glob, os
+    folder = os.path.join(app.static_folder, "docs", "pricelists")
+    files  = sorted(glob.glob(os.path.join(folder, "*.pdf")))
+    items  = [{"name": os.path.basename(f), "url": f"/static/docs/pricelists/{os.path.basename(f)}"} for f in files]
+    return render_template("docs/pricelists.html", items=items)
 
 
 @app.route("/solar/<sid>/bom", methods=["GET", "POST"])

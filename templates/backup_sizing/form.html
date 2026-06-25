@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+{% block title %}{% if bs %}Edit Backup Sizing — {{ bs.site_ref }}{% else %}New Backup Sizing{% endif %}{% endblock %}
+{% block breadcrumb %}
+  <a href="/backup-sizing" class="text-muted text-decoration-none">Backup Sizing</a>
+  &rsaquo; {% if bs %}Edit — {{ bs.site_ref }}{% else %}New Sizing{% endif %}
+{% endblock %}
+
+{% block content %}
+<form method="post">
+<div class="row g-3">
+
+  {# ── LEFT COLUMN ──────────────────────────────────────────────────────────── #}
+  <div class="col-lg-4">
+
+    <div class="card mb-3">
+      <div class="card-header"><span class="section-header mb-0">Site Details</span></div>
+      <div class="card-body">
+        <div class="mb-2">
+          <label class="form-label">Site Reference</label>
+          <input type="text" name="site_ref" class="form-control form-control-sm"
+                 value="{{ bs.site_ref if bs else '' }}" placeholder="e.g. Garden City Server Room">
+        </div>
+        <div class="mb-2">
+          <label class="form-label">Customer Name</label>
+          <input type="text" name="customer_name" class="form-control form-control-sm"
+                 value="{{ bs.customer_name if bs else '' }}">
+        </div>
+        <div class="mb-2">
+          <label class="form-label">Linked Quotation</label>
+          <select name="quotation_id" class="form-select form-select-sm">
+            <option value="">-- None --</option>
+            {% for q in quotations %}
+            <option value="{{ q.id }}"
+              {% if bs and bs.quotation_id == q.id %}selected
+              {% elif not bs and prefill_qid == q.id|string %}selected
+              {% endif %}>{{ q.quotation_no }} — {{ q.customer_name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="mb-2">
+          <label class="form-label">Desired Backup Time (hours)</label>
+          <input type="number" name="backup_hours" class="form-control form-control-sm"
+                 step="0.5" min="0.5" max="72"
+                 value="{{ bs.backup_hours if bs else '4' }}"
+                 placeholder="e.g. 4">
+          <div class="form-text">System recommends products from catalog to achieve this.</div>
+        </div>
+        <div class="mb-0">
+          <label class="form-label">Notes</label>
+          <textarea name="notes" class="form-control form-control-sm" rows="2"
+                    placeholder="Optional notes...">{{ bs.notes if bs and bs.notes else '' }}</textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-header d-flex align-items-center justify-content-between">
+        <span class="section-header mb-0">Advanced</span>
+        <button class="btn btn-sm btn-link text-muted p-0" type="button"
+                data-bs-toggle="collapse" data-bs-target="#advancedSettings">
+          <i class="bi bi-chevron-down"></i>
+        </button>
+      </div>
+      <div class="collapse" id="advancedSettings">
+        <div class="card-body">
+          <div class="mb-2">
+            <label class="form-label">Depth of Discharge (DoD)</label>
+            <input type="number" name="dod" class="form-control form-control-sm"
+                   step="0.01" min="0.1" max="1.0"
+                   value="{{ bs.dod if bs else '0.80' }}">
+            <div class="form-text">0.80 = 80% (LiFePO4 standard)</div>
+          </div>
+          <div class="mb-0">
+            <label class="form-label">Inverter Efficiency</label>
+            <input type="number" name="inverter_efficiency" class="form-control form-control-sm"
+                   step="0.01" min="0.1" max="1.0"
+                   value="{{ bs.inverter_efficiency if bs else '0.90' }}">
+            <div class="form-text">0.90 = 90% (typical)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <button type="submit" class="btn btn-primary w-100">
+      <i class="bi bi-floppy me-1"></i> Save Backup Sizing
+    </button>
+
+  </div>
+
+  {# ── RIGHT COLUMN ─────────────────────────────────────────────────────────── #}
+  <div class="col-lg-8">
+
+    <div class="card mb-3">
+      <div class="card-header d-flex align-items-center justify-content-between">
+        <span class="section-header mb-0">Load Items</span>
+        <button type="button" class="btn btn-sm btn-outline-secondary" id="addLoadRow">
+          <i class="bi bi-plus"></i> Add Row
+        </button>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-sm mb-0" id="loadTable">
+            <thead>
+              <tr>
+                <th style="width:36px">#</th>
+                <th>Description</th>
+                <th style="width:70px">Qty</th>
+                <th style="width:90px">Unit (W)</th>
+                <th style="width:90px">Total W</th>
+                <th style="width:36px"></th>
+              </tr>
+            </thead>
+            <tbody id="loadBody">
+              {% if bs and load_items %}
+                {% for item in load_items %}
+                <tr>
+                  <td class="text-muted small row-num">{{ loop.index }}</td>
+                  <td><input type="text" name="desc[]" class="form-control form-control-sm" value="{{ item.description }}" required></td>
+                  <td><input type="number" name="qty[]" class="form-control form-control-sm load-qty" min="0" step="any" value="{{ item.qty }}"></td>
+                  <td><input type="number" name="watts[]" class="form-control form-control-sm load-watts" min="0" step="any" value="{{ item.unit_watts }}"></td>
+                  <td><input type="text" class="form-control form-control-sm load-total bg-transparent border-0" readonly value="{{ (item.qty * item.unit_watts)|int }}"></td>
+                  <td><button type="button" class="btn btn-sm btn-outline-danger remove-load-row py-0 px-1"><i class="bi bi-x"></i></button></td>
+                </tr>
+                {% endfor %}
+              {% else %}
+                <tr>
+                  <td class="text-muted small row-num">1</td>
+                  <td><input type="text" name="desc[]" class="form-control form-control-sm" placeholder="e.g. LED Lights" required></td>
+                  <td><input type="number" name="qty[]" class="form-control form-control-sm load-qty" min="0" step="any" value="1"></td>
+                  <td><input type="number" name="watts[]" class="form-control form-control-sm load-watts" min="0" step="any" value="0"></td>
+                  <td><input type="text" class="form-control form-control-sm load-total bg-transparent border-0" readonly value="0"></td>
+                  <td><button type="button" class="btn btn-sm btn-outline-danger remove-load-row py-0 px-1"><i class="bi bi-x"></i></button></td>
+                </tr>
+              {% endif %}
+            </tbody>
+            <tfoot>
+              <tr class="table-active">
+                <td colspan="4" class="text-end fw-semibold small pe-3">Total Operating Load</td>
+                <td><input type="text" id="loadTotal" class="form-control form-control-sm bg-transparent border-0 fw-semibold" readonly value="0 W"></td>
+                <td></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-body text-muted small">
+        <i class="bi bi-info-circle me-1"></i>
+        After saving, the system will recommend SRNE products from your catalog ranked by total cost
+        to achieve your desired backup time.
+      </div>
+    </div>
+
+  </div>
+</div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  function recalcTotals() {
+    var total = 0;
+    document.querySelectorAll('#loadBody tr').forEach(function (row, idx) {
+      var qtyEl   = row.querySelector('.load-qty');
+      var wattsEl = row.querySelector('.load-watts');
+      var totEl   = row.querySelector('.load-total');
+      var numEl   = row.querySelector('.row-num');
+      if (!qtyEl || !wattsEl) return;
+      var qty   = parseFloat(qtyEl.value) || 0;
+      var watts = parseFloat(wattsEl.value) || 0;
+      var rowW  = qty * watts;
+      if (totEl) totEl.value = rowW.toLocaleString(undefined, {maximumFractionDigits: 0});
+      if (numEl) numEl.textContent = idx + 1;
+      total += rowW;
+    });
+    var footEl = document.getElementById('loadTotal');
+    if (footEl) footEl.value = total.toLocaleString(undefined, {maximumFractionDigits: 0}) + ' W';
+  }
+
+  function bindLoadRow(row) {
+    row.querySelectorAll('.load-qty, .load-watts').forEach(function (inp) {
+      inp.addEventListener('input', recalcTotals);
+    });
+    var removeBtn = row.querySelector('.remove-load-row');
+    if (removeBtn) removeBtn.addEventListener('click', function () {
+      row.remove();
+      recalcTotals();
+    });
+  }
+
+  document.querySelectorAll('#loadBody tr').forEach(bindLoadRow);
+
+  document.getElementById('addLoadRow').addEventListener('click', function () {
+    var tbody = document.getElementById('loadBody');
+    var count = tbody.querySelectorAll('tr').length + 1;
+    var tr = document.createElement('tr');
+    tr.innerHTML = '<td class="text-muted small row-num">' + count + '</td>' +
+      '<td><input type="text" name="desc[]" class="form-control form-control-sm" placeholder="Equipment name" required></td>' +
+      '<td><input type="number" name="qty[]" class="form-control form-control-sm load-qty" min="0" step="any" value="1"></td>' +
+      '<td><input type="number" name="watts[]" class="form-control form-control-sm load-watts" min="0" step="any" value="0"></td>' +
+      '<td><input type="text" class="form-control form-control-sm load-total bg-transparent border-0" readonly value="0"></td>' +
+      '<td><button type="button" class="btn btn-sm btn-outline-danger remove-load-row py-0 px-1"><i class="bi bi-x"></i></button></td>';
+    tbody.appendChild(tr);
+    bindLoadRow(tr);
+  });
+
+  recalcTotals();
+})();
+</script>
+{% endblock %}

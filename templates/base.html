@@ -84,6 +84,16 @@
           <i class="bi bi-sun"></i> Solar Sizing
         </a>
       </li>
+      <li class="nav-item">
+        <a href="/backup-sizing" class="nav-link {% if request.path.startswith('/backup-sizing') %}active{% endif %}">
+          <i class="bi bi-battery-charging me-2"></i>Backup Sizing
+        </a>
+      </li>
+      <li class="nav-item">
+        <a href="/docs/pricelists" class="nav-link {% if request.path.startswith('/docs') %}active{% endif %}">
+          <i class="bi bi-file-earmark-pdf me-2"></i>Price Lists
+        </a>
+      </li>
     </ul>
 
     <div class="sidebar-user mt-auto pt-3 border-top border-secondary">

@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+{% block title %}{{ bs.site_ref }} — Backup Sizing{% endblock %}
+{% block breadcrumb %}
+  <a href="/backup-sizing" class="text-muted text-decoration-none">Backup Sizing</a>
+  &rsaquo; {{ bs.site_ref or bs.customer_name or 'View' }}
+{% endblock %}
+
+{% macro money(v) %}{{ '{:,.0f}'.format(v or 0) }}{% endmacro %}
+
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
+  <div>
+    <h5 class="mb-0">{{ bs.site_ref }} — {{ bs.customer_name }}</h5>
+    {% if bs.quotation_no %}
+    <div class="text-muted small mt-1">Linked to
+      <a href="/quotations/{{ bs.quotation_id }}" class="text-blue text-decoration-none">{{ bs.quotation_no }}</a>
+    </div>
+    {% endif %}
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <a href="/backup-sizing/{{ bs.id }}/edit" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-pencil"></i> Edit
+    </a>
+    <a href="/backup-sizing/{{ bs.id }}/pdf" class="btn btn-sm btn-outline-danger">
+      <i class="bi bi-file-pdf"></i> PDF
+    </a>
+    <form method="post" action="/backup-sizing/{{ bs.id }}/delete"
+          onsubmit="return confirm('Delete this backup sizing? This cannot be undone.')">
+      <button type="submit" class="btn btn-sm btn-outline-danger">
+        <i class="bi bi-trash"></i>
+      </button>
+    </form>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-8">
+
+    {# ── Load Declaration ── #}
+    <div class="card mb-3">
+      <div class="card-header"><span class="section-header mb-0">Load Declaration</span></div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-sm mb-0">
+            <thead>
+              <tr>
+                <th style="width:36px">#</th>
+                <th>Equipment</th>
+                <th class="text-center">Qty</th>
+                <th class="text-end">Unit (W)</th>
+                <th class="text-end">Total (W)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for item in load_items %}
+              <tr>
+                <td class="text-muted">{{ loop.index }}</td>
+                <td>{{ item.description }}</td>
+                <td class="text-center">{{ item.qty|int if item.qty == item.qty|int else item.qty }}</td>
+                <td class="text-end">{{ '{:,.0f}'.format(item.unit_watts) }}</td>
+                <td class="text-end">{{ '{:,.0f}'.format(item.qty * item.unit_watts) }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+            <tfoot>
+              <tr style="border-top:2px solid var(--accent-green)">
+                <td colspan="4" class="text-end fw-semibold small pe-3">TOTAL OPERATING LOAD</td>
+                <td class="text-end fw-bold" style="color:var(--accent-green)">{{ '{:,.0f}'.format(total_load_w) }} W</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    {# ── Product Recommendations ── #}
+    <div class="card mb-3">
+      <div class="card-header d-flex align-items-center justify-content-between">
+        <span class="section-header mb-0">Product Recommendations — {{ bs.backup_hours }}h Backup</span>
+        <span class="badge bg-secondary bg-opacity-25 text-secondary small">Ranked by total cost</span>
+      </div>
+      <div class="card-body p-0">
+        {% if battery_results %}
+        <div class="table-responsive">
+          <table class="table table-sm mb-0">
+            <thead>
+              <tr>
+                <th>Battery</th>
+                <th class="text-center">Units</th>
+                <th class="text-end">Bat. Cost</th>
+                <th>Inverter</th>
+                <th class="text-end">Inv. Cost</th>
+                <th class="text-end">Total</th>
+                <th class="text-center">Backup</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for opt in battery_results %}
+              <tr {% if loop.first %}style="background:rgba(166,227,161,.06)"{% endif %}>
+                <td>
+                  <span class="{% if loop.first %}fw-semibold{% endif %}">{{ opt.battery_name }}</span>
+                  {% if loop.first %}<span class="badge ms-1" style="background:rgba(166,227,161,.2);color:var(--accent-green);font-size:.65rem">Best Value</span>{% endif %}
+                  <div class="text-muted" style="font-size:.7rem">{{ opt.battery_spec }}</div>
+                  <div class="text-muted" style="font-size:.65rem">{{ opt.bus_v }}V bus</div>
+                </td>
+                <td class="text-center fw-semibold">{{ opt.units }}</td>
+                <td class="text-end money small">UGX {{ money(opt.bat_cost) }}</td>
+                <td>
+                  {% if opt.inverter %}
+                    <span style="font-size:.8rem">{{ opt.inverter.name }}</span>
+                  {% else %}
+                    <span class="text-warning small"><i class="bi bi-exclamation-triangle"></i> No match in catalog</span>
+                  {% endif %}
+                </td>
+                <td class="text-end money small">{% if opt.inverter %}UGX {{ money(opt.inv_cost) }}{% else %}—{% endif %}</td>
+                <td class="text-end money fw-bold {% if loop.first %}text-green{% endif %}">UGX {{ money(opt.total_cost) }}</td>
+                <td class="text-center fw-semibold small" style="color:var(--accent-blue)">{{ opt.backup_str }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <div class="px-3 pb-2 pt-1">
+          <small class="text-muted">
+            DoD: {{ (bs.dod * 100)|int }}% — Inverter efficiency: {{ (bs.inverter_efficiency * 100)|int }}%
+            {% if recommended_kva %} — Min. inverter: {{ recommended_kva }}{% endif %}
+          </small>
+        </div>
+        {% else %}
+        <div class="p-4 text-center text-muted">
+          <i class="bi bi-battery-half fs-3 d-block mb-2"></i>
+          No battery products with specs found in catalog. Run <strong>srne_catalog_migration.sql</strong> in Supabase to seed SRNE products.
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+  </div>
+
+  <div class="col-lg-4">
+    <div class="card mb-3">
+      <div class="card-header"><span class="section-header mb-0">Details</span></div>
+      <div class="card-body p-0">
+        <table class="table table-sm mb-0">
+          <tbody>
+            <tr>
+              <td class="text-muted small">Site Ref</td>
+              <td class="small">{{ bs.site_ref or '—' }}</td>
+            </tr>
+            <tr>
+              <td class="text-muted small">Customer</td>
+              <td class="small">{{ bs.customer_name or '—' }}</td>
+            </tr>
+            <tr>
+              <td class="text-muted small">Target Backup</td>
+              <td class="small fw-semibold">{{ bs.backup_hours }}h</td>
+            </tr>
+            <tr>
+              <td class="text-muted small">DoD</td>
+              <td class="small">{{ (bs.dod * 100)|int }}%</td>
+            </tr>
+            <tr>
+              <td class="text-muted small">Inv. Efficiency</td>
+              <td class="small">{{ (bs.inverter_efficiency * 100)|int }}%</td>
+            </tr>
+            {% if recommended_kva %}
+            <tr>
+              <td class="text-muted small">Min. Inverter</td>
+              <td class="small fw-semibold text-warning">{{ recommended_kva }}</td>
+            </tr>
+            {% endif %}
+            <tr>
+              <td class="text-muted small">Created</td>
+              <td class="small">{{ bs.created_at.strftime('%d %b %Y') if bs.created_at else '—' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    {% if bs.notes %}
+    <div class="card mb-3">
+      <div class="card-header"><span class="section-header mb-0">Notes</span></div>
+      <div class="card-body">
+        <p class="mb-0 small">{{ bs.notes }}</p>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

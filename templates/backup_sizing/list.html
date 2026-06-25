@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Backup Sizing{% endblock %}
+{% block breadcrumb %}Backup Sizing{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h5 class="mb-0">Backup Sizing</h5>
+  <a href="/backup-sizing/new" class="btn btn-sm btn-primary">
+    <i class="bi bi-plus-lg me-1"></i> New Backup Sizing
+  </a>
+</div>
+
+{% if rows %}
+<div class="card">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-sm mb-0">
+        <thead>
+          <tr>
+            <th>Site Ref</th>
+            <th>Customer</th>
+            <th class="text-center">Inverter (kVA)</th>
+            <th class="text-end">Total Load (W)</th>
+            <th>Linked Quotation</th>
+            <th>Date Created</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+          <tr>
+            <td>
+              <a href="/backup-sizing/{{ row.id }}" class="text-decoration-none">
+                {{ row.site_ref or '—' }}
+              </a>
+            </td>
+            <td>{{ row.customer_name or '—' }}</td>
+            <td class="text-center">{{ row.inverter_kva if row.inverter_kva else '—' }}</td>
+            <td class="text-end">{{ '{:,.0f}'.format(row.total_load_w) }}</td>
+            <td>
+              {% if row.quotation_no %}
+              <a href="/quotations/{{ row.quotation_id }}">{{ row.quotation_no }}</a>
+              {% else %}
+              <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td class="text-muted small">
+              {{ row.created_at.strftime('%d %b %Y') if row.created_at else '—' }}
+            </td>
+            <td>
+              <div class="d-flex gap-1">
+                <a href="/backup-sizing/{{ row.id }}" class="btn btn-sm btn-outline-secondary py-0 px-2">
+                  <i class="bi bi-eye"></i>
+                </a>
+                <a href="/backup-sizing/{{ row.id }}/edit" class="btn btn-sm btn-outline-secondary py-0 px-2">
+                  <i class="bi bi-pencil"></i>
+                </a>
+                <form method="post" action="/backup-sizing/{{ row.id }}/delete"
+                      onsubmit="return confirm('Delete this backup sizing?')">
+                  <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2">
+                    <i class="bi bi-trash"></i>
+                  </button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% else %}
+<div class="text-center text-muted py-5">
+  <i class="bi bi-battery-charging display-4 mb-3 d-block"></i>
+  <p>No backup sizings yet.</p>
+  <a href="/backup-sizing/new" class="btn btn-primary btn-sm">Create your first one</a>
+</div>
+{% endif %}
+{% endblock %}

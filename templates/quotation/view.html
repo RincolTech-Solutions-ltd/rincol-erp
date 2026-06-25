@@ -53,6 +53,15 @@
     <a href="{{ url_for('quotations_pdf', qid=q.id) }}" class="btn btn-sm btn-outline-danger">
       <i class="bi bi-file-pdf"></i> PDF
     </a>
+    {% if backup_sz %}
+    <a href="/backup-sizing/{{ backup_sz.id }}" class="btn btn-sm btn-outline-success">
+      &#9889; View Backup Sizing
+    </a>
+    {% else %}
+    <a href="/backup-sizing/new?quotation_id={{ q.id }}" class="btn btn-sm btn-outline-warning">
+      &#9889; Backup Sizing
+    </a>
+    {% endif %}
   </div>
 </div>
 
