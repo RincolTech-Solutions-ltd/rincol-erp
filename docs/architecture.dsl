@@ -30,7 +30,9 @@ workspace "Rincol Web ERP" "Business management system for Rincol Tech Solutions
                 balancingModule = component "Balancing Module" "Per-job profit split between Hillary (45%) and Dennis (55%) by default, adjustable. Spend lines, settlements, auto-computed status. Symmetric remaining formula." "Flask routes /balancing/*"
                 tasksModule = component "Tasks Module" "To-do tracking with priority, due date, assignee (Hillary/Dennis/Both). Linked to quotations. Overdue alerts via Telegram. Statuses: Pending, In Progress, Done, Cancelled (cancellation reason required). Cancelled tasks excluded from Open view." "Flask routes /tasks/*"
                 solarModule = component "Solar Sizing Module" "6-step engineering engine: load→battery→panel array→yield→financials→payback. LiFePO4 no-series guard. BoM with live catalog pricing. PPTX proposal export." "Flask routes /solar/*"
-                catalogModule = component "Catalog & Suppliers" "Product catalog with category-aware electrical specs (JSONB). Supplier management. Used as picker in quotation line items and solar sizing." "Flask routes /catalog/*, /suppliers/*"
+                backupModule = component "Backup Sizing Module" "Load declaration tool for battery backup scoping. User enters equipment load items and desired backup hours. System queries catalog, ranks all viable battery+inverter combos by total cost, highlights best value. Requires a linked customer (FK). One-click quotation creation from any ranked option, pre-filling customer details and line items. PDF assessment report for customer delivery." "Flask routes /backup-sizing/*, backup_sizing table"
+                catalogModule = component "Catalog & Suppliers" "Product catalog with category-aware electrical specs (JSONB). Supplier management. Used as picker in quotation line items, solar sizing, and backup sizing." "Flask routes /catalog/*, /suppliers/*"
+                priceListModule = component "Price Lists" "Static PDF pricelist viewer. Lists PDFs from static/docs/pricelists/ with view and download actions. SRNE Uganda wholesale pricelist 2026-05-27 seeded." "Flask route /docs/pricelists"
                 statementModule = component "Public Statement" "Token-gated customer statement page at /s/<uuid>. No login required. Live data — always current. PDF opens in new tab. Web Share API share button (clipboard fallback). Back navigation via ?back=<cid> query param (PWA-safe — no auth dependency)." "Flask routes /s/<token>, /s/<token>/pdf"
 
                 # Utilities
@@ -81,6 +83,9 @@ workspace "Rincol Web ERP" "Business management system for Rincol Tech Solutions
         tasksModule     -> notifyUtil  "Notify on create/assign"
         solarModule     -> dbUtil      "CRUD solar sizings, BoM"
         solarModule     -> pdfUtil     "Generate PPTX proposal"
+        backupModule    -> dbUtil      "CRUD backup sizings; query catalog for battery+inverter options"
+        backupModule    -> pdfUtil     "Generate backup assessment PDF"
+        backupModule    -> quotationModule "Creates Draft quotation pre-filled with selected option"
         catalogModule   -> dbUtil      "CRUD catalog items, suppliers"
         statementModule -> dbUtil      "Read customer + quotations (read-only)"
         statementModule -> pdfUtil     "Generate statement PDF"
