@@ -57,7 +57,7 @@
 
 {# Summary strip #}
 <div class="row g-3 mb-3">
-  <div class="col-6 col-md-3">
+  <div class="col-6 col-md-2">
     <div class="card h-100" style="border-color:rgba(166,227,161,.25)">
       <div class="card-body py-2">
         <div class="section-header mb-1">Total Profit</div>
@@ -65,7 +65,7 @@
       </div>
     </div>
   </div>
-  <div class="col-6 col-md-3">
+  <div class="col-6 col-md-2">
     <div class="card h-100" style="border-color:rgba(137,180,250,.25)">
       <div class="card-body py-2">
         <div class="section-header mb-1">Hillary Still Owed</div>
@@ -76,18 +76,53 @@
       </div>
     </div>
   </div>
-  <div class="col-6 col-md-3">
+  <div class="col-6 col-md-2">
     <div class="card h-100" style="border-color:rgba(167,139,250,.25)">
       <div class="card-body py-2">
         <div class="section-header mb-1">Dennis Still Owed</div>
-        <div class="money fw-bold {% if summary.dennis_remaining > 0 %}text-danger{% else %}text-green{% endif %}" style="color:{% if summary.dennis_remaining > 0 %}#f87171{% else %}#a6e3a1{% endif %}">
+        <div class="money fw-bold {% if summary.dennis_remaining > 0 %}text-danger{% else %}text-green{% endif %}">
           UGX {{ money(summary.dennis_remaining) }}
         </div>
         <div class="text-muted" style="font-size:.7rem">profit share: UGX {{ money(summary.d_share) }}</div>
       </div>
     </div>
   </div>
-  <div class="col-6 col-md-3">
+
+  {# ── Holding card — who is sitting on the other person's money ── #}
+  {% set d_holds = summary.dennis_holding %}
+  {% set h_holds = summary.hillary_holding %}
+  {% set net = d_holds - h_holds %}
+  <div class="col-12 col-md-4">
+    <div class="card h-100" style="border-color:rgba(251,191,36,.3);background:rgba(251,191,36,.04)">
+      <div class="card-body py-2">
+        <div class="section-header mb-1" style="color:#fbbf24">Cash Holding</div>
+        {% if d_holds == 0 and h_holds == 0 %}
+          <div class="text-muted small">No cash being held — all square.</div>
+        {% else %}
+          {% if d_holds > 0 %}
+          <div class="d-flex justify-content-between align-items-center mb-1">
+            <span class="small">Dennis holds for Hillary</span>
+            <span class="money fw-bold" style="color:#fbbf24">UGX {{ money(d_holds) }}</span>
+          </div>
+          {% endif %}
+          {% if h_holds > 0 %}
+          <div class="d-flex justify-content-between align-items-center mb-1">
+            <span class="small">Hillary holds for Dennis</span>
+            <span class="money fw-bold" style="color:#fbbf24">UGX {{ money(h_holds) }}</span>
+          </div>
+          {% endif %}
+          <div class="border-top pt-1 mt-1 d-flex justify-content-between align-items-center">
+            <span class="small text-muted">Net: {{ 'Dennis → Hillary' if net > 0 else 'Hillary → Dennis' }}</span>
+            <span class="money fw-semibold {% if net != 0 %}text-warning{% else %}text-green{% endif %}">
+              UGX {{ money(net | abs) }}
+            </span>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-6 col-md-2">
     <div class="card h-100" style="border-color:rgba(166,227,161,.25)">
       <div class="card-body py-2">
         <div class="section-header mb-1">Jobs Balanced</div>

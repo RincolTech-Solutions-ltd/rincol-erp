@@ -1046,7 +1046,8 @@ def _balancing_list_query():
 def _enrich_balancing_rows(rows):
     jobs = []
     summary = dict(quoted=0, costs=0, profit=0, h_share=0, d_share=0,
-                   hillary_remaining=0, dennis_remaining=0)
+                   hillary_remaining=0, dennis_remaining=0,
+                   dennis_holding=0, hillary_holding=0)
     for j in rows:
         j = dict(j)
         quoted  = float(j["quoted"] or 0)
@@ -1082,6 +1083,10 @@ def _enrich_balancing_rows(rows):
         summary["d_share"]           += d_share
         summary["hillary_remaining"] += hillary_remaining
         summary["dennis_remaining"]  += dennis_remaining
+        # Holding: if someone over-collected from customers they hold the excess for the other
+        if computed_status != "Settled":
+            summary["dennis_holding"]  += max(0, -dennis_remaining)
+            summary["hillary_holding"] += max(0, -hillary_remaining)
     return jobs, summary
 
 
