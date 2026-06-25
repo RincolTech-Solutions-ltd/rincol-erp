@@ -11,10 +11,19 @@
 
 <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
   <div>
-    <h5 class="mb-0">{{ bs.site_ref }} — {{ bs.customer_name }}</h5>
-    {% if bs.quotation_no %}
-    <div class="text-muted small mt-1">Linked to
-      <a href="/quotations/{{ bs.quotation_id }}" class="text-blue text-decoration-none">{{ bs.quotation_no }}</a>
+    <h5 class="mb-0">{{ bs.site_ref or 'Unnamed Site' }}</h5>
+    {% if bs.customer_name %}
+    <div class="text-muted small mt-1">
+      <i class="bi bi-person me-1"></i>{{ bs.customer_name }}
+      {% if bs.quotation_no %}
+       &mdash; <a href="/quotations/{{ bs.quotation_id }}" class="text-blue text-decoration-none">{{ bs.quotation_no }}</a>
+      {% endif %}
+    </div>
+    {% else %}
+    <div class="text-warning small mt-1">
+      <i class="bi bi-exclamation-triangle me-1"></i>No customer linked —
+      <a href="/backup-sizing/{{ bs.id }}/edit" class="text-warning">edit to add one</a>
+      before creating a quotation.
     </div>
     {% endif %}
   </div>
@@ -118,13 +127,17 @@
                 <td class="text-end money fw-bold {% if loop.first %}text-green{% endif %}">UGX {{ money(opt.total_cost) }}</td>
                 <td class="text-center fw-semibold small" style="color:var(--accent-blue)">{{ opt.backup_str }}</td>
                 <td class="text-center">
+                  {% if bs.customer_id %}
                   <form method="post" action="/backup-sizing/{{ bs.id }}/create-quotation">
                     <input type="hidden" name="opt_idx" value="{{ loop.index0 }}">
                     <button type="submit" class="btn btn-xs btn-outline-primary" style="font-size:.7rem;padding:2px 8px"
-                            onclick="return confirm('Create a new Draft quotation from this option?')">
+                            onclick="return confirm('Create a Draft quotation from this option?')">
                       <i class="bi bi-file-earmark-plus"></i> Quote
                     </button>
                   </form>
+                  {% else %}
+                  <span class="text-muted" style="font-size:.7rem" title="Add a customer to enable">—</span>
+                  {% endif %}
                 </td>
               </tr>
               {% endfor %}

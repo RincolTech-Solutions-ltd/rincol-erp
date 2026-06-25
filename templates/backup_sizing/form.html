@@ -21,21 +21,20 @@
                  value="{{ bs.site_ref if bs else '' }}" placeholder="e.g. Garden City Server Room">
         </div>
         <div class="mb-2">
-          <label class="form-label">Customer Name</label>
-          <input type="text" name="customer_name" class="form-control form-control-sm"
-                 value="{{ bs.customer_name if bs else '' }}">
-        </div>
-        <div class="mb-2">
-          <label class="form-label">Linked Quotation</label>
-          <select name="quotation_id" class="form-select form-select-sm">
-            <option value="">-- None --</option>
-            {% for q in quotations %}
-            <option value="{{ q.id }}"
-              {% if bs and bs.quotation_id == q.id %}selected
-              {% elif not bs and prefill_qid == q.id|string %}selected
-              {% endif %}>{{ q.quotation_no }} — {{ q.customer_name }}</option>
+          <label class="form-label">Customer <span class="text-danger">*</span></label>
+          <select name="customer_id" class="form-select form-select-sm" required>
+            <option value="">-- Select customer --</option>
+            {% for c in customers %}
+            <option value="{{ c.id }}"
+              {% if bs and bs.customer_id == c.id|string %}selected{% endif %}>
+              {{ c.customer_no }} — {{ c.name }}
+            </option>
             {% endfor %}
           </select>
+          <div class="form-text">
+            Customer not in system?
+            <a href="/customers/new" target="_blank">Add customer</a> first.
+          </div>
         </div>
         <div class="mb-2">
           <label class="form-label">Desired Backup Time (hours)</label>

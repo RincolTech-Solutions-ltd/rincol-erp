@@ -1966,11 +1966,10 @@ def _parse_backup_form(form):
                 "unit_watts": float(w or 0),
             })
 
-    quotation_id = form.get("quotation_id", "").strip() or None
+    customer_id = form.get("customer_id", "").strip() or None
     return {
         "site_ref":            form.get("site_ref", "").strip(),
-        "customer_name":       form.get("customer_name", "").strip(),
-        "quotation_id":        quotation_id,
+        "customer_id":         customer_id,
         "backup_hours":        float(form.get("backup_hours") or 4),
         "dod":                 float(form.get("dod", 0.80)),
         "inverter_efficiency": float(form.get("inverter_efficiency", 0.90)),
@@ -2116,17 +2115,20 @@ def backup_sizing_list():
 def backup_sizing_new():
     if request.method == "POST":
         data = _parse_backup_form(request.form)
+        if not data["customer_id"]:
+            flash("Please select a customer before saving.", "danger")
+            customers = query("SELECT id, customer_no, name FROM customers ORDER BY name")
+            return render_template("backup_sizing/form.html", bs=None, customers=customers)
         bid = str(uuid.uuid4())
         execute("""
             INSERT INTO backup_sizing
-                (id, quotation_id, site_ref, customer_name, load_items,
+                (id, customer_id, site_ref, load_items,
                  backup_hours, dod, inverter_efficiency, notes)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
         """, (
             bid,
-            data["quotation_id"],
+            data["customer_id"],
             data["site_ref"],
-            data["customer_name"],
             data["load_items"],
             data["backup_hours"],
             data["dod"],
@@ -2135,16 +2137,23 @@ def backup_sizing_new():
         ))
         flash("Backup sizing saved.", "success")
         return redirect(url_for("backup_sizing_view", bid=bid))
-    quotations = query("SELECT id, quotation_no, customer_name FROM quotations ORDER BY created_at DESC")
-    prefill_qid = request.args.get("quotation_id", "")
-    return render_template("backup_sizing/form.html", bs=None,
-                           quotations=quotations, prefill_qid=prefill_qid)
+    customers = query("SELECT id, customer_no, name FROM customers ORDER BY name")
+    return render_template("backup_sizing/form.html", bs=None, customers=customers)
 
 
 @app.route("/backup-sizing/<bid>")
 @login_required
 def backup_sizing_view(bid):
-    bs = query_one("SELECT bs.*, q.quotation_no FROM backup_sizing bs LEFT JOIN quotations q ON q.id = bs.quotation_id WHERE bs.id=%s", (bid,))
+    bs = query_one("""
+        SELECT bs.*, q.quotation_no,
+               c.name AS customer_name, c.phone AS customer_phone,
+               c.email AS customer_email, c.address AS customer_address,
+               c.customer_no
+        FROM backup_sizing bs
+        LEFT JOIN quotations q ON q.id = bs.quotation_id
+        LEFT JOIN customers c ON c.id = bs.customer_id
+        WHERE bs.id=%s
+    """, (bid,))
     if not bs:
         abort(404)
     battery_results, load_items, total_load_w, recommended_kva = _backup_battery_results(bs)
@@ -2158,9 +2167,18 @@ def backup_sizing_view(bid):
 @app.route("/backup-sizing/<bid>/create-quotation", methods=["POST"])
 @login_required
 def backup_sizing_create_quotation(bid):
-    bs = query_one("SELECT * FROM backup_sizing WHERE id=%s", (bid,))
+    bs = query_one("""
+        SELECT bs.*, c.name AS customer_name, c.phone AS customer_phone,
+               c.email AS customer_email, c.address AS customer_address
+        FROM backup_sizing bs
+        LEFT JOIN customers c ON c.id = bs.customer_id
+        WHERE bs.id=%s
+    """, (bid,))
     if not bs:
         abort(404)
+    if not bs.get("customer_id"):
+        flash("This backup sizing has no customer linked. Please edit it and select a customer first.", "danger")
+        return redirect(url_for("backup_sizing_view", bid=bid))
     opt_idx = int(request.form.get("opt_idx", 0))
     battery_results, _, _, _ = _backup_battery_results(bs)
     if not battery_results or opt_idx >= len(battery_results):
@@ -2171,7 +2189,6 @@ def backup_sizing_create_quotation(bid):
     qid      = str(uuid.uuid4())
     qno      = next_quotation_number()
     site     = (bs.get("site_ref") or "").strip()
-    customer = (bs.get("customer_name") or "").strip()
     title    = "Backup Power System" + (f" — {site}" if site else "")
 
     execute("""
@@ -2179,10 +2196,12 @@ def backup_sizing_create_quotation(bid):
             customer_email, customer_address, delivery, validity, warranty,
             payment_terms, status, total_amount, vat_rate, notes, customer_id)
         VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-    """, (qid, qno, date.today().isoformat(), title, customer, "", "", "",
+    """, (qid, qno, date.today().isoformat(), title,
+          bs.get("customer_name") or "", bs.get("customer_phone") or "",
+          bs.get("customer_email") or "", bs.get("customer_address") or "",
           "", "30 days", "", "Cash / MM / EFT", "Draft",
           opt["total_cost"], None,
-          f"Generated from Backup Sizing — {site or bid}", None))
+          f"Generated from Backup Sizing — {site or bid}", bs["customer_id"]))
 
     bat_total = opt["bat_unit_price"] * opt["units"]
     execute("INSERT INTO quotation_items (quotation_id,line_no,description,uom,qty,unit_price,total) VALUES (%s,%s,%s,%s,%s,%s,%s)",
@@ -2210,17 +2229,23 @@ def backup_sizing_edit(bid):
         abort(404)
     if request.method == "POST":
         data = _parse_backup_form(request.form)
+        if not data["customer_id"]:
+            flash("Please select a customer.", "danger")
+            customers = query("SELECT id, customer_no, name FROM customers ORDER BY name")
+            load_items = bs.get("load_items", [])
+            if isinstance(load_items, str):
+                load_items = json.loads(load_items)
+            return render_template("backup_sizing/form.html", bs=bs, customers=customers, load_items=load_items)
         execute("""
             UPDATE backup_sizing SET
-                quotation_id=%s, site_ref=%s, customer_name=%s,
+                customer_id=%s, site_ref=%s,
                 load_items=%s, backup_hours=%s,
                 dod=%s, inverter_efficiency=%s, notes=%s,
                 updated_at=NOW()
             WHERE id=%s
         """, (
-            data["quotation_id"],
+            data["customer_id"],
             data["site_ref"],
-            data["customer_name"],
             data["load_items"],
             data["backup_hours"],
             data["dod"],
@@ -2230,13 +2255,11 @@ def backup_sizing_edit(bid):
         ))
         flash("Backup sizing updated.", "success")
         return redirect(url_for("backup_sizing_view", bid=bid))
-    quotations = query("SELECT id, quotation_no, customer_name FROM quotations ORDER BY created_at DESC")
+    customers = query("SELECT id, customer_no, name FROM customers ORDER BY name")
     load_items = bs.get("load_items", [])
     if isinstance(load_items, str):
         load_items = json.loads(load_items)
-    return render_template("backup_sizing/form.html", bs=bs,
-                           quotations=quotations, prefill_qid="",
-                           load_items=load_items)
+    return render_template("backup_sizing/form.html", bs=bs, customers=customers, load_items=load_items)
 
 
 @app.route("/backup-sizing/<bid>/delete", methods=["POST"])
