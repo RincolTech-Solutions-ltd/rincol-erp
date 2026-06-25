@@ -2157,9 +2157,31 @@ def backup_sizing_view(bid):
     if not bs:
         abort(404)
     battery_results, load_items, total_load_w, recommended_kva = _backup_battery_results(bs)
+
+    # Group by bus voltage, preserving global index for the Quote form
+    _VOLT_LABELS = {
+        12: ("12V Systems", "Smaller inverters up to 1.5kW. Best for loads under 500W."),
+        24: ("24V Systems", "Supports up to 3.3kW inverters. Good for home/office under 2kW."),
+        48: ("48V Systems", "Supports 5kW+ inverters and parallel expansion. Best for large loads."),
+    }
+    grouped_results = {}
+    for global_idx, opt in enumerate(battery_results):
+        v = opt["bus_v"]
+        if v not in grouped_results:
+            grouped_results[v] = []
+        entry = dict(opt)
+        entry["global_idx"]      = global_idx
+        entry["is_overall_best"] = (global_idx == 0)
+        entry["is_tier_best"]    = (len(grouped_results[v]) == 0)
+        grouped_results[v].append(entry)
+    # Sort voltage groups ascending
+    grouped_results = {v: grouped_results[v] for v in sorted(grouped_results)}
+
     return render_template("backup_sizing/view.html", bs=bs,
                            load_items=load_items,
                            battery_results=battery_results,
+                           grouped_results=grouped_results,
+                           volt_labels=_VOLT_LABELS,
                            total_load_w=total_load_w,
                            recommended_kva=recommended_kva)
 

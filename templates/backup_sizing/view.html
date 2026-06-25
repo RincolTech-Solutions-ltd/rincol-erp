@@ -84,80 +84,96 @@
     </div>
 
     {# ── Product Recommendations ── #}
-    <div class="card mb-3">
-      <div class="card-header d-flex align-items-center justify-content-between">
-        <span class="section-header mb-0">Product Recommendations — {{ bs.backup_hours }}h Backup</span>
-        <span class="badge bg-secondary bg-opacity-25 text-secondary small">Ranked by total cost</span>
+    <div class="mb-1 d-flex align-items-center justify-content-between">
+      <span class="section-header mb-0">Product Recommendations — {{ bs.backup_hours }}h Backup</span>
+      <small class="text-muted">Grouped by system voltage &middot; ranked by total cost</small>
+    </div>
+
+    {% if grouped_results %}
+      {% for bus_v, opts in grouped_results.items() %}
+      {% set vinfo = volt_labels.get(bus_v, (bus_v|string + 'V Systems', '')) %}
+      <div class="card mb-3">
+        <div class="card-header d-flex align-items-center justify-content-between py-2">
+          <div>
+            <span class="fw-semibold" style="font-size:.85rem">{{ vinfo[0] }}</span>
+            <span class="text-muted ms-2" style="font-size:.75rem">{{ vinfo[1] }}</span>
+          </div>
+          <span class="badge bg-secondary bg-opacity-25 text-secondary" style="font-size:.65rem">
+            {{ opts|length }} option{{ 's' if opts|length != 1 }}
+          </span>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-sm mb-0">
+              <thead>
+                <tr>
+                  <th>Battery</th>
+                  <th class="text-center">Units</th>
+                  <th class="text-end">Bat. Cost</th>
+                  <th>Inverter</th>
+                  <th class="text-end">Inv. Cost</th>
+                  <th class="text-end">Total</th>
+                  <th class="text-center">Backup</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for opt in opts %}
+                <tr {% if opt.is_overall_best %}style="background:rgba(166,227,161,.06)"{% endif %}>
+                  <td>
+                    <span class="{% if opt.is_overall_best or opt.is_tier_best %}fw-semibold{% endif %}">{{ opt.battery_name }}</span>
+                    {% if opt.is_overall_best %}
+                      <span class="badge ms-1" style="background:rgba(166,227,161,.2);color:var(--accent-green);font-size:.6rem">Best Value</span>
+                    {% elif opt.is_tier_best %}
+                      <span class="badge ms-1 bg-secondary bg-opacity-25 text-secondary" style="font-size:.6rem">Best in tier</span>
+                    {% endif %}
+                    <div class="text-muted" style="font-size:.7rem">{{ opt.battery_spec }}</div>
+                  </td>
+                  <td class="text-center fw-semibold">{{ opt.units }}</td>
+                  <td class="text-end money small">UGX {{ money(opt.bat_cost) }}</td>
+                  <td>
+                    {% if opt.inverter %}
+                      <span style="font-size:.8rem">{{ opt.inverter.name }}</span>
+                    {% else %}
+                      <span class="text-warning small"><i class="bi bi-exclamation-triangle"></i> No match</span>
+                    {% endif %}
+                  </td>
+                  <td class="text-end money small">{% if opt.inverter %}UGX {{ money(opt.inv_cost) }}{% else %}—{% endif %}</td>
+                  <td class="text-end money fw-bold {% if opt.is_overall_best %}text-green{% endif %}">UGX {{ money(opt.total_cost) }}</td>
+                  <td class="text-center fw-semibold small" style="color:var(--accent-blue)">{{ opt.backup_str }}</td>
+                  <td class="text-center">
+                    {% if bs.customer_id %}
+                    <form method="post" action="/backup-sizing/{{ bs.id }}/create-quotation">
+                      <input type="hidden" name="opt_idx" value="{{ opt.global_idx }}">
+                      <button type="submit" class="btn btn-xs btn-outline-primary" style="font-size:.7rem;padding:2px 8px"
+                              onclick="return confirm('Create a Draft quotation from this option?')">
+                        <i class="bi bi-file-earmark-plus"></i> Quote
+                      </button>
+                    </form>
+                    {% else %}
+                    <span class="text-muted" style="font-size:.7rem" title="Add a customer to enable">—</span>
+                    {% endif %}
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
-      <div class="card-body p-0">
-        {% if battery_results %}
-        <div class="table-responsive">
-          <table class="table table-sm mb-0">
-            <thead>
-              <tr>
-                <th>Battery</th>
-                <th class="text-center">Units</th>
-                <th class="text-end">Bat. Cost</th>
-                <th>Inverter</th>
-                <th class="text-end">Inv. Cost</th>
-                <th class="text-end">Total</th>
-                <th class="text-center">Backup</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for opt in battery_results %}
-              <tr {% if loop.first %}style="background:rgba(166,227,161,.06)"{% endif %}>
-                <td>
-                  <span class="{% if loop.first %}fw-semibold{% endif %}">{{ opt.battery_name }}</span>
-                  {% if loop.first %}<span class="badge ms-1" style="background:rgba(166,227,161,.2);color:var(--accent-green);font-size:.65rem">Best Value</span>{% endif %}
-                  <div class="text-muted" style="font-size:.7rem">{{ opt.battery_spec }}</div>
-                  <div class="text-muted" style="font-size:.65rem">{{ opt.bus_v }}V bus</div>
-                </td>
-                <td class="text-center fw-semibold">{{ opt.units }}</td>
-                <td class="text-end money small">UGX {{ money(opt.bat_cost) }}</td>
-                <td>
-                  {% if opt.inverter %}
-                    <span style="font-size:.8rem">{{ opt.inverter.name }}</span>
-                  {% else %}
-                    <span class="text-warning small"><i class="bi bi-exclamation-triangle"></i> No match in catalog</span>
-                  {% endif %}
-                </td>
-                <td class="text-end money small">{% if opt.inverter %}UGX {{ money(opt.inv_cost) }}{% else %}—{% endif %}</td>
-                <td class="text-end money fw-bold {% if loop.first %}text-green{% endif %}">UGX {{ money(opt.total_cost) }}</td>
-                <td class="text-center fw-semibold small" style="color:var(--accent-blue)">{{ opt.backup_str }}</td>
-                <td class="text-center">
-                  {% if bs.customer_id %}
-                  <form method="post" action="/backup-sizing/{{ bs.id }}/create-quotation">
-                    <input type="hidden" name="opt_idx" value="{{ loop.index0 }}">
-                    <button type="submit" class="btn btn-xs btn-outline-primary" style="font-size:.7rem;padding:2px 8px"
-                            onclick="return confirm('Create a Draft quotation from this option?')">
-                      <i class="bi bi-file-earmark-plus"></i> Quote
-                    </button>
-                  </form>
-                  {% else %}
-                  <span class="text-muted" style="font-size:.7rem" title="Add a customer to enable">—</span>
-                  {% endif %}
-                </td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-        <div class="px-3 pb-2 pt-1">
-          <small class="text-muted">
-            DoD: {{ (bs.dod * 100)|int }}% — Inverter efficiency: {{ (bs.inverter_efficiency * 100)|int }}%
-            {% if recommended_kva %} — Min. inverter: {{ recommended_kva }}{% endif %}
-          </small>
-        </div>
-        {% else %}
+      {% endfor %}
+      <div class="text-muted small mb-3 px-1">
+        DoD: {{ (bs.dod * 100)|int }}% &middot; Inverter efficiency: {{ (bs.inverter_efficiency * 100)|int }}%
+        {% if recommended_kva %} &middot; Min. inverter: {{ recommended_kva }}{% endif %}
+      </div>
+    {% else %}
+      <div class="card mb-3">
         <div class="p-4 text-center text-muted">
           <i class="bi bi-battery-half fs-3 d-block mb-2"></i>
           No battery products with specs found in catalog. Run <strong>srne_catalog_migration.sql</strong> in Supabase to seed SRNE products.
         </div>
-        {% endif %}
       </div>
-    </div>
+    {% endif %}
 
   </div>
 
