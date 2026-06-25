@@ -2073,15 +2073,17 @@ def _backup_battery_results(bs):
         total_cost = bat_cost + inv_cost
 
         options.append({
-            "battery_name": bat["name"],
-            "battery_spec": bat.get("spec", ""),
-            "units":        units_needed,
-            "bat_cost":     bat_cost,
-            "inverter":     matching_inv,
-            "inv_cost":     inv_cost,
-            "total_cost":   total_cost,
-            "backup_str":   f"{h}h {m:02d}min",
-            "bus_v":        bus_v,
+            "battery_name":      bat["name"],
+            "battery_spec":      bat.get("spec", ""),
+            "bat_id":            bat["id"],
+            "bat_unit_price":    bat.get("sell_price") or 0,
+            "units":             units_needed,
+            "bat_cost":          bat_cost,
+            "inverter":          matching_inv,
+            "inv_cost":          inv_cost,
+            "total_cost":        total_cost,
+            "backup_str":        f"{h}h {m:02d}min",
+            "bus_v":             bus_v,
             "no_inverter":  matching_inv is None,
         })
 
@@ -2151,6 +2153,53 @@ def backup_sizing_view(bid):
                            battery_results=battery_results,
                            total_load_w=total_load_w,
                            recommended_kva=recommended_kva)
+
+
+@app.route("/backup-sizing/<bid>/create-quotation", methods=["POST"])
+@login_required
+def backup_sizing_create_quotation(bid):
+    bs = query_one("SELECT * FROM backup_sizing WHERE id=%s", (bid,))
+    if not bs:
+        abort(404)
+    opt_idx = int(request.form.get("opt_idx", 0))
+    battery_results, _, _, _ = _backup_battery_results(bs)
+    if not battery_results or opt_idx >= len(battery_results):
+        flash("Selected option not found — catalog may need seeding.", "danger")
+        return redirect(url_for("backup_sizing_view", bid=bid))
+
+    opt      = battery_results[opt_idx]
+    qid      = str(uuid.uuid4())
+    qno      = next_quotation_number()
+    site     = (bs.get("site_ref") or "").strip()
+    customer = (bs.get("customer_name") or "").strip()
+    title    = "Backup Power System" + (f" — {site}" if site else "")
+
+    execute("""
+        INSERT INTO quotations (id, quotation_no, date, title, customer_name, customer_phone,
+            customer_email, customer_address, delivery, validity, warranty,
+            payment_terms, status, total_amount, vat_rate, notes, customer_id)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+    """, (qid, qno, date.today().isoformat(), title, customer, "", "", "",
+          "", "30 days", "", "Cash / MM / EFT", "Draft",
+          opt["total_cost"], None,
+          f"Generated from Backup Sizing — {site or bid}", None))
+
+    bat_total = opt["bat_unit_price"] * opt["units"]
+    execute("INSERT INTO quotation_items (quotation_id,line_no,description,uom,qty,unit_price,total) VALUES (%s,%s,%s,%s,%s,%s,%s)",
+            (qid, 1,
+             opt["battery_name"] + (f" ({opt['battery_spec']})" if opt.get("battery_spec") else ""),
+             "pc", opt["units"], opt["bat_unit_price"], bat_total))
+
+    if opt.get("inverter"):
+        inv = opt["inverter"]
+        inv_price = inv.get("sell_price") or 0
+        execute("INSERT INTO quotation_items (quotation_id,line_no,description,uom,qty,unit_price,total) VALUES (%s,%s,%s,%s,%s,%s,%s)",
+                (qid, 2, inv.get("name", "Inverter-Charger"), "pc", 1, inv_price, inv_price))
+
+    execute("UPDATE backup_sizing SET quotation_id=%s, updated_at=NOW() WHERE id=%s", (qid, bid))
+
+    flash(f"Quotation {qno} created from backup sizing. Review and adjust below.", "success")
+    return redirect(url_for("quotations_edit", qid=qid))
 
 
 @app.route("/backup-sizing/<bid>/edit", methods=["GET", "POST"])

@@ -93,6 +93,7 @@
                 <th class="text-end">Inv. Cost</th>
                 <th class="text-end">Total</th>
                 <th class="text-center">Backup</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
@@ -116,6 +117,15 @@
                 <td class="text-end money small">{% if opt.inverter %}UGX {{ money(opt.inv_cost) }}{% else %}—{% endif %}</td>
                 <td class="text-end money fw-bold {% if loop.first %}text-green{% endif %}">UGX {{ money(opt.total_cost) }}</td>
                 <td class="text-center fw-semibold small" style="color:var(--accent-blue)">{{ opt.backup_str }}</td>
+                <td class="text-center">
+                  <form method="post" action="/backup-sizing/{{ bs.id }}/create-quotation">
+                    <input type="hidden" name="opt_idx" value="{{ loop.index0 }}">
+                    <button type="submit" class="btn btn-xs btn-outline-primary" style="font-size:.7rem;padding:2px 8px"
+                            onclick="return confirm('Create a new Draft quotation from this option?')">
+                      <i class="bi bi-file-earmark-plus"></i> Quote
+                    </button>
+                  </form>
+                </td>
               </tr>
               {% endfor %}
             </tbody>
