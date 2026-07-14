@@ -12,21 +12,43 @@
 <div class="card mb-3">
   <div class="card-header"><span class="section-header mb-0">Client Information</span></div>
   <div class="card-body">
-    <div class="row g-2">
-      <div class="col-md-4">
-        <label class="form-label form-label-sm">Client Name *</label>
-        <input type="text" name="client_name" class="form-control form-control-sm"
-               value="{{ sizing.client_name if sizing else '' }}" required>
+    {# Customer data embedded for JS auto-fill #}
+    <script>
+    var _customers = {
+      {% for c in customers %}
+      "{{ c.id }}": {"phone": {{ c.phone|tojson if c.phone else 'null' }}, "email": {{ c.email|tojson if c.email else 'null' }}},
+      {% endfor %}
+    };
+    function onCustomerChange(sel) {
+      var d = _customers[sel.value] || {};
+      document.getElementById('solar_phone_disp').textContent = d.phone || '';
+      document.getElementById('solar_email_disp').textContent = d.email || '';
+    }
+    </script>
+    <div class="row g-2 align-items-end">
+      <div class="col-md-5">
+        <label class="form-label form-label-sm">Customer *</label>
+        <select name="customer_id" id="solar_customer_sel" class="form-select form-select-sm" required
+                onchange="onCustomerChange(this)">
+          <option value="">-- Select customer --</option>
+          {% for c in customers %}
+          <option value="{{ c.id }}"
+            {% if sizing and sizing.customer_id and sizing.customer_id|string == c.id|string %}selected{% endif %}>
+            {{ c.customer_no }} — {{ c.name }}
+          </option>
+          {% endfor %}
+        </select>
+        <div class="form-text">Customer not in system? <a href="/customers/new" target="_blank">Add customer</a> first.</div>
       </div>
       <div class="col-md-2">
         <label class="form-label form-label-sm">Phone</label>
-        <input type="text" name="client_phone" class="form-control form-control-sm"
-               value="{{ sizing.client_phone if sizing else '' }}">
+        <div class="form-control form-control-sm bg-light text-muted" id="solar_phone_disp"
+             style="min-height:31px">{{ sizing.client_phone if sizing else '' }}</div>
       </div>
-      <div class="col-md-3">
+      <div class="col-md-2">
         <label class="form-label form-label-sm">Email</label>
-        <input type="email" name="client_email" class="form-control form-control-sm"
-               value="{{ sizing.client_email if sizing else '' }}">
+        <div class="form-control form-control-sm bg-light text-muted" id="solar_email_disp"
+             style="min-height:31px; font-size:0.78rem">{{ sizing.client_email if sizing else '' }}</div>
       </div>
       <div class="col-md-3">
         <label class="form-label form-label-sm">Site / Location</label>

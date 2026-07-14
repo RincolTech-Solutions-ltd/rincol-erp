@@ -1647,6 +1647,21 @@ def _reconcile_results_with_bom(s, bom_list):
 def _save_sizing(sid, f):
     """Save sizing + appliances, run calculation, store results. Returns sid."""
     sid        = sid or str(uuid.uuid4())
+
+    _cid = f.get("customer_id", "").strip()
+    customer_id = _cid if _cid and _cid != "None" else None
+
+    # Populate client fields from DB customer record when linked
+    client_name  = f.get("client_name", "") or ""
+    client_phone = f.get("client_phone", "") or ""
+    client_email = f.get("client_email", "") or ""
+    if customer_id:
+        cust = query_one("SELECT name, phone, email FROM customers WHERE id=%s", (customer_id,))
+        if cust:
+            client_name  = cust["name"]
+            client_phone = cust["phone"] or ""
+            client_email = cust["email"] or ""
+
     params     = _params_from_form(f)
     appliances = _parse_appliances_from_form(f)
     results    = calc_sizing(params, appliances)
@@ -1673,7 +1688,7 @@ def _save_sizing(sid, f):
     # Upsert solar_sizings
     execute("""
         INSERT INTO solar_sizings (
-            id, client_name, client_phone, client_email, client_site,
+            id, client_name, client_phone, client_email, client_site, customer_id,
             utility_provider, utility_tariff, tariff_escalation,
             system_voltage, battery_type, days_autonomy, dod,
             inverter_efficiency, cable_efficiency, inverter_idle_w, peak_sun_hours, performance_ratio,
@@ -1691,7 +1706,7 @@ def _save_sizing(sid, f):
             yaka_savings_10yr, payback_years, inverter_flag, panel_array_flag,
             notes, updated_at
         ) VALUES (
-            %s,%s,%s,%s,%s,
+            %s,%s,%s,%s,%s,%s,
             %s,%s,%s,
             %s,%s,%s,%s,
             %s,%s,%s,%s,%s,
@@ -1712,6 +1727,7 @@ def _save_sizing(sid, f):
         ON CONFLICT (id) DO UPDATE SET
             client_name=EXCLUDED.client_name, client_phone=EXCLUDED.client_phone,
             client_email=EXCLUDED.client_email, client_site=EXCLUDED.client_site,
+            customer_id=EXCLUDED.customer_id,
             utility_provider=EXCLUDED.utility_provider, utility_tariff=EXCLUDED.utility_tariff,
             tariff_escalation=EXCLUDED.tariff_escalation,
             system_voltage=EXCLUDED.system_voltage, battery_type=EXCLUDED.battery_type,
@@ -1750,7 +1766,7 @@ def _save_sizing(sid, f):
             notes=EXCLUDED.notes, updated_at=NOW()
     """, (
         sid,
-        f.get("client_name"), f.get("client_phone",""), f.get("client_email",""), f.get("client_site",""),
+        client_name, client_phone, client_email, f.get("client_site",""), customer_id,
         params["utility_provider"], params["utility_tariff"], tariff_esc_pct,
         params["system_voltage"], params["battery_type"], params["days_autonomy"], params["dod"],
         params["inverter_efficiency"], params["cable_efficiency"], params["inverter_idle_w"],
@@ -1836,13 +1852,19 @@ def _solar_catalog():
 @app.route("/solar/new", methods=["GET", "POST"])
 @login_required
 def solar_new():
+    customers = query("SELECT id, customer_no, name, phone, email FROM customers ORDER BY name")
     if request.method == "POST":
+        if not request.form.get("customer_id"):
+            flash("Please select a customer before saving.", "danger")
+            return render_template("solar/form.html", sizing=None,
+                                   appliances=None, default_appliances=_DEFAULT_APPLIANCES,
+                                   catalog=_solar_catalog(), customers=customers)
         sid = _save_sizing(None, request.form)
         flash("Sizing calculated and saved.", "success")
         return redirect(url_for("solar_view", sid=sid))
     return render_template("solar/form.html", sizing=None,
                            appliances=None, default_appliances=_DEFAULT_APPLIANCES,
-                           catalog=_solar_catalog())
+                           catalog=_solar_catalog(), customers=customers)
 
 
 @app.route("/solar/<sid>")
@@ -1871,13 +1893,21 @@ def solar_edit(sid):
     s = query_one("SELECT * FROM solar_sizings WHERE id=%s", (sid,))
     if not s:
         abort(404)
+    customers = query("SELECT id, customer_no, name, phone, email FROM customers ORDER BY name")
     if request.method == "POST":
+        if not request.form.get("customer_id"):
+            flash("Please select a customer before saving.", "danger")
+            appliances = query("SELECT * FROM solar_sizing_appliances WHERE sizing_id=%s ORDER BY line_no", (sid,))
+            return render_template("solar/form.html", sizing=s, appliances=appliances,
+                                   default_appliances=_DEFAULT_APPLIANCES, catalog=_solar_catalog(),
+                                   customers=customers)
         _save_sizing(sid, request.form)
         flash("Sizing recalculated and saved.", "success")
         return redirect(url_for("solar_view", sid=sid))
     appliances = query("SELECT * FROM solar_sizing_appliances WHERE sizing_id=%s ORDER BY line_no", (sid,))
     return render_template("solar/form.html", sizing=s, appliances=appliances,
-                           default_appliances=_DEFAULT_APPLIANCES, catalog=_solar_catalog())
+                           default_appliances=_DEFAULT_APPLIANCES, catalog=_solar_catalog(),
+                           customers=customers)
 
 
 @app.route("/solar/<sid>/to-quotation", methods=["POST"])
@@ -1893,8 +1923,8 @@ def solar_to_quotation(sid):
     execute("""
         INSERT INTO quotations (id, quotation_no, date, title, customer_name, customer_phone,
             customer_email, customer_address, delivery, validity, warranty, payment_terms,
-            status, total_amount, notes)
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            status, total_amount, notes, customer_id)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
     """, (
         qid, qno, date.today().isoformat(),
         f"Solar Installation — {s['client_name']}",
@@ -1906,6 +1936,7 @@ def solar_to_quotation(sid):
         s["system_cost"] or 0,
         f"Generated from Solar Sizing. {s['utility_provider']} tariff: UGX {s['utility_tariff']:,.0f}/kWh. "
         f"Payback: {s['payback_years']:.1f} years.",
+        s.get("customer_id"),
     ))
     for item in bom:
         execute("""
