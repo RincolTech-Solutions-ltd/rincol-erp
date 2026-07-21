@@ -14,6 +14,21 @@ input.solar-ro {
   background:transparent !important; opacity:.5; cursor:default;
 }
 </style>
+
+{# Customer lookup data — used by JS below #}
+<script>
+var _custList = [
+  {% for c in customers %}
+  {"id":{{ c.id|tojson }},"no":{{ c.customer_no|tojson }},"name":{{ c.name|tojson }},
+   "phone":{{ (c.phone or '')|tojson }},"email":{{ (c.email or '')|tojson }}},
+  {% endfor %}
+];
+var _custByLabel = {};
+_custList.forEach(function(c){ _custByLabel[c.no + ' - ' + c.name] = c; });
+var _custById = {};
+_custList.forEach(function(c){ _custById[c.id] = c; });
+</script>
+
 <div class="card mb-3">
   <div class="card-header"><span class="section-header mb-0">Client Information</span></div>
   <div class="card-body">
@@ -22,16 +37,15 @@ input.solar-ro {
         <label class="form-label form-label-sm">Customer *</label>
         <input type="hidden" name="customer_id" id="sc_hidden"
                value="{{ sizing.customer_id if sizing and sizing.customer_id else '' }}">
-        <div style="position:relative">
-          <input type="text" id="sc_search" class="form-control form-control-sm"
-                 placeholder="Type to search customers..." autocomplete="off" aria-label="Customer search">
-          <div id="sc_dropdown" style="
-            display:none; position:fixed; z-index:99999;
-            background:#1e293b; border:1px solid #334155;
-            border-radius:6px; max-height:260px; overflow-y:auto;
-            box-shadow:0 8px 24px rgba(0,0,0,.6); font-size:.83rem;
-          "></div>
-        </div>
+        <input type="text" id="sc_display" class="form-control form-control-sm"
+               list="sc_datalist" autocomplete="off"
+               placeholder="Type to search customers..."
+               aria-label="Customer search">
+        <datalist id="sc_datalist">
+          {% for c in customers %}
+          <option value="{{ c.customer_no }} - {{ c.name }}"></option>
+          {% endfor %}
+        </datalist>
         <div class="form-text">Customer not in system? <a href="/customers/new" target="_blank">Add customer</a> first.</div>
       </div>
       <div class="col-md-2">
@@ -53,86 +67,32 @@ input.solar-ro {
   </div>
 </div>
 <script>
-{# Script is placed AFTER the HTML elements so getElementById works without DOMContentLoaded #}
 (function () {
-  var custList = [
-    {% for c in customers %}
-    {"id":"{{ c.id }}", "no":"{{ c.customer_no }}", "name":{{ c.name|tojson }},
-     "phone":{{ c.phone|tojson if c.phone else '""' }},
-     "email":{{ c.email|tojson if c.email else '""' }}},
-    {% endfor %}
-  ];
-  var custMap = {};
-  custList.forEach(function(c){ custMap[c.id] = c; });
+  var display = document.getElementById('sc_display');
+  var hidden  = document.getElementById('sc_hidden');
+  var phoneEl = document.getElementById('solar_phone_disp');
+  var emailEl = document.getElementById('solar_email_disp');
 
-  var search   = document.getElementById('sc_search');
-  var hidden   = document.getElementById('sc_hidden');
-  var dropdown = document.getElementById('sc_dropdown');
-  var phoneEl  = document.getElementById('solar_phone_disp');
-  var emailEl  = document.getElementById('solar_email_disp');
-
-  // Move dropdown to body so Bootstrap card stacking context can't clip it
-  document.body.appendChild(dropdown);
-
-  function reposition() {
-    var r = search.getBoundingClientRect();
-    dropdown.style.top   = (r.bottom + 2) + 'px';
-    dropdown.style.left  = r.left + 'px';
-    dropdown.style.width = r.width + 'px';
+  function applySelection(label) {
+    var c = _custByLabel[label];
+    if (c) {
+      hidden.value  = c.id;
+      phoneEl.value = c.phone || '';
+      emailEl.value = c.email || '';
+    } else {
+      hidden.value  = '';
+      phoneEl.value = '';
+      emailEl.value = '';
+    }
   }
 
-  function renderList(q) {
-    q = (q || '').toLowerCase();
-    var html = '';
-    custList.forEach(function(c) {
-      var label = c.no + ' — ' + c.name;
-      if (!q || label.toLowerCase().indexOf(q) !== -1) {
-        html += '<div style="padding:8px 12px;cursor:pointer;border-bottom:1px solid #334155" '
-              + 'data-id="' + c.id + '" class="sc-item">' + label + '</div>';
-      }
-    });
-    dropdown.innerHTML = html || '<div style="padding:8px 12px;opacity:.5">No customers found</div>';
-    dropdown.querySelectorAll('.sc-item').forEach(function(el) {
-      el.addEventListener('mousedown', function(e) {
-        e.preventDefault();
-        var c = custMap[el.dataset.id] || {};
-        hidden.value  = el.dataset.id;
-        search.value  = el.textContent;
-        phoneEl.value = c.phone || '';
-        emailEl.value = c.email || '';
-        dropdown.style.display = 'none';
-      });
-    });
-  }
+  display.addEventListener('change', function () { applySelection(display.value); });
+  display.addEventListener('input',  function () { applySelection(display.value); });
 
-  function openDropdown() {
-    renderList(search.value);
-    reposition();
-    dropdown.style.display = 'block';
-  }
-
-  search.addEventListener('focus',  openDropdown);
-  search.addEventListener('input',  function() {
-    hidden.value  = '';
-    phoneEl.value = '';
-    emailEl.value = '';
-    openDropdown();
-  });
-  search.addEventListener('blur', function() {
-    setTimeout(function(){ dropdown.style.display = 'none'; }, 200);
-  });
-  window.addEventListener('scroll', function() {
-    if (dropdown.style.display === 'block') reposition();
-  }, true);
-  window.addEventListener('resize', function() {
-    if (dropdown.style.display === 'block') reposition();
-  });
-
-  // Pre-fill if editing an existing sizing that has a customer linked
   var initId = hidden.value;
-  if (initId && custMap[initId]) {
-    var c = custMap[initId];
-    search.value  = c.no + ' — ' + c.name;
+  if (initId && _custById[initId]) {
+    var c = _custById[initId];
+    display.value = c.no + ' - ' + c.name;
     phoneEl.value = c.phone || '';
     emailEl.value = c.email || '';
   }
