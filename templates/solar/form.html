@@ -10,20 +10,19 @@
 
 {# ── CLIENT INFO ──────────────────────────────────────────────────────────── #}
 <style>
-.solar-cust-wrap { position:relative; }
-.solar-cust-dropdown {
-  display:none; position:absolute; top:100%; left:0; right:0; z-index:1050;
+#sc_dropdown {
+  display:none; position:fixed; z-index:9999;
   background:var(--bs-body-bg,#1e293b); border:1px solid var(--bs-border-color,#334155);
-  border-radius:4px; max-height:220px; overflow-y:auto; box-shadow:0 4px 12px rgba(0,0,0,.4);
+  border-radius:4px; max-height:240px; overflow-y:auto; box-shadow:0 6px 18px rgba(0,0,0,.5);
 }
-.solar-cust-dropdown .sc-item {
-  padding:6px 10px; cursor:pointer; font-size:.82rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+#sc_dropdown .sc-item {
+  padding:7px 12px; cursor:pointer; font-size:.83rem;
 }
-.solar-cust-dropdown .sc-item:hover, .solar-cust-dropdown .sc-item.active { background:rgba(99,179,237,.18); }
-.solar-cust-dropdown .sc-empty { padding:6px 10px; font-size:.82rem; opacity:.5; }
+#sc_dropdown .sc-item:hover { background:rgba(99,179,237,.2); }
+#sc_dropdown .sc-empty { padding:7px 12px; font-size:.83rem; opacity:.5; }
 input.solar-ro {
   background:transparent !important;
-  border-color: var(--bs-border-color, #334155) !important;
+  border-color:var(--bs-border-color,#334155) !important;
   opacity:.55; cursor:default; color:var(--bs-body-color);
 }
 </style>
@@ -40,17 +39,27 @@ input.solar-ro {
     var _custMap = {};
     _custList.forEach(function(c){ _custMap[c.id] = c; });
 
-    function solarCustInit() {
-      var search  = document.getElementById('sc_search');
-      var hidden  = document.getElementById('sc_hidden');
-      var dropdown= document.getElementById('sc_dropdown');
-      var phone   = document.getElementById('solar_phone_disp');
-      var email   = document.getElementById('solar_email_disp');
+    document.addEventListener('DOMContentLoaded', function() {
+      var search   = document.getElementById('sc_search');
+      var hidden   = document.getElementById('sc_hidden');
+      var dropdown = document.getElementById('sc_dropdown');
+      var phone    = document.getElementById('solar_phone_disp');
+      var email    = document.getElementById('solar_email_disp');
+
+      // Mount dropdown on body so no parent overflow/z-index can clip it
+      document.body.appendChild(dropdown);
+
+      function reposition() {
+        var r = search.getBoundingClientRect();
+        dropdown.style.left  = r.left + 'px';
+        dropdown.style.top   = (r.bottom + 2) + 'px';
+        dropdown.style.width = r.width + 'px';
+      }
 
       function renderList(q) {
-        q = (q||'').toLowerCase();
+        q = (q || '').toLowerCase();
         var html = '';
-        _custList.forEach(function(c, i) {
+        _custList.forEach(function(c) {
           var label = c.no + ' — ' + c.name;
           if (!q || label.toLowerCase().indexOf(q) !== -1) {
             html += '<div class="sc-item" data-id="' + c.id + '">' + label + '</div>';
@@ -65,40 +74,44 @@ input.solar-ro {
         });
       }
 
+      function openDropdown() {
+        renderList(search.value);
+        reposition();
+        dropdown.style.display = 'block';
+      }
+
       function selectCustomer(id, label) {
-        hidden.value = id;
-        search.value = label;
+        hidden.value  = id;
+        search.value  = label;
         var c = _custMap[id] || {};
         phone.value = c.phone || '';
         email.value = c.email || '';
         dropdown.style.display = 'none';
       }
 
+      search.addEventListener('focus', openDropdown);
       search.addEventListener('input', function() {
         hidden.value = '';
-        phone.value = '';
-        email.value = '';
-        renderList(search.value);
-        dropdown.style.display = 'block';
-      });
-      search.addEventListener('focus', function() {
-        renderList(search.value);
-        dropdown.style.display = 'block';
+        phone.value  = '';
+        email.value  = '';
+        openDropdown();
       });
       search.addEventListener('blur', function() {
-        setTimeout(function(){ dropdown.style.display = 'none'; }, 150);
+        setTimeout(function(){ dropdown.style.display = 'none'; }, 200);
       });
+      window.addEventListener('scroll', function() {
+        if (dropdown.style.display === 'block') reposition();
+      }, true);
 
-      // Pre-fill on edit
+      // Pre-fill when editing an existing sizing
       var initId = hidden.value;
       if (initId && _custMap[initId]) {
         var c = _custMap[initId];
         search.value = c.no + ' — ' + c.name;
-        phone.value = c.phone || '';
-        email.value = c.email || '';
+        phone.value  = c.phone || '';
+        email.value  = c.email || '';
       }
-    }
-    document.addEventListener('DOMContentLoaded', solarCustInit);
+    });
     </script>
     <div class="row g-2 align-items-end">
       <div class="col-md-5">
