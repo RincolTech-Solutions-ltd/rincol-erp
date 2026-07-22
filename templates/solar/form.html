@@ -160,22 +160,21 @@ _custList.forEach(function(c){ _custById[c.id] = c; });
   <div class="card-body">
 
     {# ── Panel picker ── #}
+    <script>
+    var _panelItems = [{% for p in catalog['Solar Panel'] %}{"label":{{ (p.name + (' — ' + p.spec if p.spec else ''))|tojson }},"wp":{{ p.spec_data.get('wp',0) }},"voc":{{ p.spec_data.get('voc',0) }},"isc":{{ p.spec_data.get('isc',0) }},"price":{{ p.price or 0 }}},{% endfor %}];
+    </script>
     <div class="row g-2 mb-2 align-items-end">
       <div class="col-12"><small class="text-muted fw-semibold">Solar Panels</small></div>
       <div class="col-md-4">
-        <label class="form-label form-label-sm">Select from catalog</label>
-        <select class="form-select form-select-sm" onchange="fillPanel(this)">
-          <option value="">— pick a panel —</option>
+        <label class="form-label form-label-sm" for="panel-search">Select from catalog</label>
+        <input type="text" id="panel-search" class="form-control form-control-sm"
+               list="panel-list" autocomplete="off" placeholder="Search panel catalog..."
+               aria-label="Search panel catalog">
+        <datalist id="panel-list">
           {% for p in catalog['Solar Panel'] %}
-          <option value="{{ p.id }}"
-                  data-wp="{{ p.spec_data.get('wp',0) }}"
-                  data-voc="{{ p.spec_data.get('voc',0) }}"
-                  data-isc="{{ p.spec_data.get('isc',0) }}"
-                  data-price="{{ p.price }}">
-            {{ p.name }}{% if p.spec %} — {{ p.spec }}{% endif %}
-          </option>
+          <option value="{{ p.name }}{% if p.spec %} — {{ p.spec }}{% endif %}"></option>
           {% endfor %}
-        </select>
+        </datalist>
       </div>
     </div>
     <div class="row g-2 mb-2">
@@ -205,27 +204,21 @@ _custList.forEach(function(c){ _custById[c.id] = c; });
     <hr class="my-2">
 
     {# ── Inverter picker + all inverter fields ── #}
+    <script>
+    var _inverterItems = [{% for inv in catalog['Inverter'] %}{"label":{{ (inv.name + (' — ' + inv.spec if inv.spec else ''))|tojson }},"kw":{{ inv.spec_data.get('inverter_kw',0) }},"trackers":{{ inv.spec_data.get('mppt_trackers',1) }},"mpptMin":{{ inv.spec_data.get('mppt_min_v',0) }},"mpptMax":{{ inv.spec_data.get('mppt_max_v',0) }},"maxOc":{{ inv.spec_data.get('max_oc_v',0) }},"maxI":{{ inv.spec_data.get('max_input_current_per_tracker',0) }},"maxIsc":{{ inv.spec_data.get('max_isc_per_tracker',0) }},"maxPv":{{ inv.spec_data.get('max_pv_power_per_tracker',0) }},"price":{{ inv.price or 0 }}},{% endfor %}];
+    </script>
     <div class="row g-2 mb-2 align-items-end">
       <div class="col-12"><small class="text-muted fw-semibold">Inverter</small></div>
       <div class="col-md-5">
-        <label class="form-label form-label-sm">Select from catalog</label>
-        <select class="form-select form-select-sm" onchange="fillInverter(this)">
-          <option value="">— pick an inverter —</option>
+        <label class="form-label form-label-sm" for="inverter-search">Select from catalog</label>
+        <input type="text" id="inverter-search" class="form-control form-control-sm"
+               list="inverter-list" autocomplete="off" placeholder="Search inverter catalog..."
+               aria-label="Search inverter catalog">
+        <datalist id="inverter-list">
           {% for inv in catalog['Inverter'] %}
-          <option value="{{ inv.id }}"
-                  data-kw="{{ inv.spec_data.get('inverter_kw',0) }}"
-                  data-trackers="{{ inv.spec_data.get('mppt_trackers',1) }}"
-                  data-mppt-min="{{ inv.spec_data.get('mppt_min_v',0) }}"
-                  data-mppt-max="{{ inv.spec_data.get('mppt_max_v',0) }}"
-                  data-max-oc="{{ inv.spec_data.get('max_oc_v',0) }}"
-                  data-max-i="{{ inv.spec_data.get('max_input_current_per_tracker',0) }}"
-                  data-max-isc="{{ inv.spec_data.get('max_isc_per_tracker',0) }}"
-                  data-max-pv="{{ inv.spec_data.get('max_pv_power_per_tracker',0) }}"
-                  data-price="{{ inv.price }}">
-            {{ inv.name }}{% if inv.spec %} — {{ inv.spec }}{% endif %}
-          </option>
+          <option value="{{ inv.name }}{% if inv.spec %} — {{ inv.spec }}{% endif %}"></option>
           {% endfor %}
-        </select>
+        </datalist>
       </div>
     </div>
     <div class="row g-2 mb-2">
@@ -278,23 +271,21 @@ _custList.forEach(function(c){ _custById[c.id] = c; });
     <hr class="my-2">
 
     {# ── Battery picker ── #}
+    <script>
+    var _batteryItems = [{% for b in catalog['Battery'] %}{"label":{{ (b.name + (' — ' + b.spec if b.spec else ''))|tojson }},"ah":{{ b.spec_data.get('ah',0) }},"voltage":{{ b.spec_data.get('voltage',0) }},"chemistry":{{ b.spec_data.get('chemistry','')|tojson }},"bank":{{ '1' if b.spec_data.get('is_complete_bank') else '0' }},"price":{{ b.price or 0 }}},{% endfor %}];
+    </script>
     <div class="row g-2 mb-2 align-items-end">
       <div class="col-12"><small class="text-muted fw-semibold">Batteries</small></div>
       <div class="col-md-4">
-        <label class="form-label form-label-sm">Select from catalog</label>
-        <select class="form-select form-select-sm" onchange="fillBattery(this)">
-          <option value="">— pick a battery —</option>
+        <label class="form-label form-label-sm" for="battery-search">Select from catalog</label>
+        <input type="text" id="battery-search" class="form-control form-control-sm"
+               list="battery-list" autocomplete="off" placeholder="Search battery catalog..."
+               aria-label="Search battery catalog">
+        <datalist id="battery-list">
           {% for b in catalog['Battery'] %}
-          <option value="{{ b.id }}"
-                  data-ah="{{ b.spec_data.get('ah',0) }}"
-                  data-voltage="{{ b.spec_data.get('voltage',0) }}"
-                  data-chemistry="{{ b.spec_data.get('chemistry','') }}"
-                  data-bank="{{ '1' if b.spec_data.get('is_complete_bank') else '0' }}"
-                  data-price="{{ b.price }}">
-            {{ b.name }}{% if b.spec %} — {{ b.spec }}{% endif %}
-          </option>
+          <option value="{{ b.name }}{% if b.spec %} — {{ b.spec }}{% endif %}"></option>
           {% endfor %}
-        </select>
+        </datalist>
       </div>
     </div>
     <div class="row g-2 mb-2">
@@ -626,58 +617,67 @@ _custList.forEach(function(c){ _custById[c.id] = c; });
   });
 })();
 
-// ── Catalog auto-fill ─────────────────────────────────────────────────────
-function fillPanel(sel) {
-  const o = sel.options[sel.selectedIndex];
-  if (!o.value) return;
-  setVal('panel_wp',   o.dataset.wp);
-  setVal('panel_voc',  o.dataset.voc);
-  setVal('panel_isc',  o.dataset.isc);
-  setVal('panel_cost', o.dataset.price);
-}
-
-function fillBattery(sel) {
-  const o = sel.options[sel.selectedIndex];
-  if (!o.value) return;
-  setVal('battery_ah',         o.dataset.ah);
-  setVal('battery_cost_each',  o.dataset.price);
-  // voltage select
-  const vs = document.querySelector('[name="battery_voltage"]');
-  if (vs && o.dataset.voltage) {
-    [...vs.options].forEach(opt => { opt.selected = parseFloat(opt.value) === parseFloat(o.dataset.voltage); });
-  }
-  // battery_type select — map chemistry to form options
-  const chem = o.dataset.chemistry || '';
-  const ts = document.querySelector('[name="battery_type"]');
-  if (ts) {
-    if (chem.toLowerCase().includes('li') || chem.toLowerCase().includes('lfp')) {
-      [...ts.options].forEach(opt => { opt.selected = opt.value === 'Li-ion'; });
-    } else if (chem) {
-      [...ts.options].forEach(opt => { opt.selected = opt.value === 'Lead Acid'; });
-    }
-  }
-  // battery_is_bank checkbox
-  const cb = document.getElementById('battery_is_bank');
-  if (cb) cb.checked = o.dataset.bank === '1';
-}
-
-function fillInverter(sel) {
-  const o = sel.options[sel.selectedIndex];
-  if (!o.value) return;
-  setVal('inverter_kw',                    o.dataset.kw);
-  setVal('inverter_cost',                  o.dataset.price);
-  setVal('mppt_trackers',                  o.dataset.trackers);
-  setVal('mppt_min_v',                     o.dataset.mpptMin);
-  setVal('mppt_max_v',                     o.dataset.mpptMax);
-  setVal('max_oc_v',                       o.dataset.maxOc);
-  setVal('max_input_current_per_tracker',  o.dataset.maxI);
-  setVal('max_isc_per_tracker',            o.dataset.maxIsc);
-  setVal('max_pv_power_per_tracker',       o.dataset.maxPv);
-}
-
+// ── Catalog auto-fill (uses shared initCatalogSearch from catalog-search.js) ──
 function setVal(name, val) {
   const el = document.querySelector('[name="' + name + '"]');
   if (el && val !== undefined && val !== '' && val !== '0') el.value = val;
 }
+
+initCatalogSearch({
+  inputId: 'panel-search',
+  items: _panelItems,
+  onSelect: function(item) {
+    if (!item) return;
+    setVal('panel_wp',   item.wp);
+    setVal('panel_voc',  item.voc);
+    setVal('panel_isc',  item.isc);
+    setVal('panel_cost', item.price);
+  }
+});
+
+initCatalogSearch({
+  inputId: 'inverter-search',
+  items: _inverterItems,
+  onSelect: function(item) {
+    if (!item) return;
+    setVal('inverter_kw',                   item.kw);
+    setVal('inverter_cost',                 item.price);
+    setVal('mppt_trackers',                 item.trackers);
+    setVal('mppt_min_v',                    item.mpptMin);
+    setVal('mppt_max_v',                    item.mpptMax);
+    setVal('max_oc_v',                      item.maxOc);
+    setVal('max_input_current_per_tracker', item.maxI);
+    setVal('max_isc_per_tracker',           item.maxIsc);
+    setVal('max_pv_power_per_tracker',      item.maxPv);
+  }
+});
+
+initCatalogSearch({
+  inputId: 'battery-search',
+  items: _batteryItems,
+  onSelect: function(item) {
+    if (!item) return;
+    setVal('battery_ah',        item.ah);
+    setVal('battery_cost_each', item.price);
+    // voltage select
+    const vs = document.querySelector('[name="battery_voltage"]');
+    if (vs && item.voltage) {
+      [...vs.options].forEach(opt => { opt.selected = parseFloat(opt.value) === parseFloat(item.voltage); });
+    }
+    // battery_type select
+    const chem = item.chemistry || '';
+    const ts = document.querySelector('[name="battery_type"]');
+    if (ts) {
+      if (chem.toLowerCase().includes('li') || chem.toLowerCase().includes('lfp')) {
+        [...ts.options].forEach(opt => { opt.selected = opt.value === 'Li-ion'; });
+      } else if (chem) {
+        [...ts.options].forEach(opt => { opt.selected = opt.value === 'Lead Acid'; });
+      }
+    }
+    // battery_is_bank checkbox
+    const cb = document.getElementById('battery_is_bank');
+    if (cb) cb.checked = item.bank === 1;
+  }
+});
 </script>
 {% endblock %}

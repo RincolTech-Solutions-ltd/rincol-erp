@@ -8,6 +8,12 @@
 {% block content %}
 <script>
 window.CATALOG_ITEMS = {{ catalog | tojson }};
+var _quotCustomers = [{% for c in customers %}{
+  "id":{{ c.id|tojson }},"label":{{ (c.customer_no + ' — ' + c.name)|tojson }},
+  "name":{{ c.name|tojson }},"phone":{{ (c.phone or '')|tojson }},
+  "email":{{ (c.email or '')|tojson }},"address":{{ (c.address or '')|tojson }},
+  "no":{{ c.customer_no|tojson }}
+},{% endfor %}];
 </script>
 <form method="post" id="quotation-form">
 <div class="row g-4">
@@ -77,14 +83,15 @@ window.CATALOG_ITEMS = {{ catalog | tojson }};
       <div class="card-body">
         {# Existing customer search #}
         <div class="mb-2">
-          <label class="form-label">Search existing customer</label>
-          <div class="position-relative">
-            <input type="text" id="customerSearch" class="form-control form-control-sm"
-                   placeholder="Type name or phone…" autocomplete="off">
-            <ul id="customerDropdown"
-                class="list-group position-absolute w-100 shadow-sm"
-                style="z-index:1050;display:none;max-height:200px;overflow-y:auto"></ul>
-          </div>
+          <label class="form-label" for="customerSearch">Search existing customer</label>
+          <input type="text" id="customerSearch" class="form-control form-control-sm"
+                 list="customerSearchList" autocomplete="off"
+                 placeholder="Type name or number…" aria-label="Search existing customer">
+          <datalist id="customerSearchList">
+            {% for c in customers %}
+            <option value="{{ c.customer_no }} — {{ c.name }}"></option>
+            {% endfor %}
+          </datalist>
         </div>
         <hr class="my-2">
         <input type="hidden" name="customer_id" id="customerIdInput" value="{{ (q.customer_id or '') if q else '' }}">
@@ -287,50 +294,19 @@ window.CATALOG_ITEMS = {{ catalog | tojson }};
 
 {% block scripts %}
 <script>
-(function () {
-  const searchInput = document.getElementById('customerSearch');
-  const dropdown    = document.getElementById('customerDropdown');
-  const idInput     = document.getElementById('customerIdInput');
-  const badge       = document.getElementById('customerRefBadge');
-
-  function fillCustomer(c) {
-    document.getElementById('custName').value    = c.name    || '';
-    document.getElementById('custPhone').value   = c.phone   || '';
-    document.getElementById('custEmail').value   = c.email   || '';
-    document.getElementById('custAddress').value = c.address || '';
-    idInput.value = c.id;
-    badge.textContent = c.customer_no;
-    searchInput.value = '';
-    dropdown.style.display = 'none';
+initCatalogSearch({
+  inputId: 'customerSearch',
+  items: _quotCustomers,
+  onSelect: function(item) {
+    if (!item) return;
+    document.getElementById('custName').value    = item.name    || '';
+    document.getElementById('custPhone').value   = item.phone   || '';
+    document.getElementById('custEmail').value   = item.email   || '';
+    document.getElementById('custAddress').value = item.address || '';
+    document.getElementById('customerIdInput').value = item.id;
+    var badge = document.getElementById('customerRefBadge');
+    if (badge) badge.textContent = item.no;
   }
-
-  let timer;
-  searchInput.addEventListener('input', function () {
-    clearTimeout(timer);
-    const q = this.value.trim();
-    if (q.length < 2) { dropdown.style.display = 'none'; return; }
-    timer = setTimeout(() => {
-      fetch(`/customers/search.json?q=${encodeURIComponent(q)}`)
-        .then(r => r.json())
-        .then(data => {
-          dropdown.innerHTML = '';
-          if (!data.length) { dropdown.style.display = 'none'; return; }
-          data.forEach(c => {
-            const li = document.createElement('li');
-            li.className = 'list-group-item list-group-item-action py-1 px-2';
-            li.style.cursor = 'pointer';
-            li.innerHTML = `<strong>${c.name}</strong> <span class="text-muted small">${c.phone || ''}</span> <span class="badge bg-secondary ms-1">${c.customer_no}</span>`;
-            li.addEventListener('click', () => fillCustomer(c));
-            dropdown.appendChild(li);
-          });
-          dropdown.style.display = 'block';
-        });
-    }, 250);
-  });
-
-  document.addEventListener('click', e => {
-    if (!searchInput.contains(e.target)) dropdown.style.display = 'none';
-  });
-})();
+});
 </script>
 {% endblock %}

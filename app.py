@@ -182,9 +182,11 @@ def quotations_list():
 def quotations_new():
     templates = query("SELECT id, name FROM system_templates ORDER BY sort_order")
     catalog   = query("SELECT id, category, name, spec, uom, sell_price, buy_price FROM catalog_items ORDER BY category, name")
+    customers = query("SELECT id, customer_no, name, phone, email, address FROM customers ORDER BY name")
     if request.method == "POST":
         return _save_quotation(None)
     return render_template("quotation/form.html", q=None, templates=templates, catalog=catalog,
+                           customers=customers,
                            qno=next_quotation_number(), today=date.today().isoformat())
 
 
@@ -219,8 +221,9 @@ def quotations_edit(qid):
     items     = query("SELECT * FROM quotation_items WHERE quotation_id=%s ORDER BY line_no", (qid,))
     templates = query("SELECT id, name FROM system_templates ORDER BY sort_order")
     catalog   = query("SELECT id, category, name, spec, uom, sell_price, buy_price FROM catalog_items ORDER BY category, name")
+    customers = query("SELECT id, customer_no, name, phone, email, address FROM customers ORDER BY name")
     return render_template("quotation/form.html", q=q, items=items,
-                           templates=templates, catalog=catalog)
+                           templates=templates, catalog=catalog, customers=customers)
 
 
 def _save_quotation(qid):
