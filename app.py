@@ -2430,7 +2430,8 @@ def solar_bom_edit(sid):
             flash("BoM regenerated from sizing.", "success")
             return redirect(url_for("solar_bom_edit", sid=sid))
 
-        else:  # save custom BoM
+        else:  # save or save_lock
+            lock   = (action == "save_lock")
             descs  = request.form.getlist("description[]")
             uoms   = request.form.getlist("uom[]")
             qtys   = request.form.getlist("qty[]")
@@ -2452,7 +2453,7 @@ def solar_bom_edit(sid):
                     VALUES (%s,%s,%s,%s,%s,%s,%s)
                 """, (sid, line, desc.strip(), uom, qty, round(price, 0), total))
 
-            # Recompute financials from new BoM total and lock
+            # Recompute financials from new BoM total
             maint    = s["maintenance_cost_10yr"] or 0
             coo_10yr = bom_total + maint
             ten_yr   = (s["annual_yield_kwh"] or 0) * 10
@@ -2465,20 +2466,25 @@ def solar_bom_edit(sid):
             annual_sav = (s["annual_yield_kwh"] or 0) * util_t
             execute("""
                 UPDATE solar_sizings
-                SET bom_locked=TRUE,
+                SET bom_locked=%s,
                     system_cost=%s, solar_cost_per_kwh=%s,
                     yaka_savings_10yr=%s, payback_years=%s,
                     updated_at=NOW()
                 WHERE id=%s
             """, (
+                lock,
                 round(bom_total, 0),
                 round(coo_10yr / ten_yr, 2) if ten_yr > 0 else 0,
                 round(ten_yr_grid - coo_10yr, 0),
                 round(bom_total / annual_sav, 2) if annual_sav > 0 else 0,
                 sid,
             ))
-            flash("BoM saved and locked.", "success")
-            return redirect(url_for("solar_view", sid=sid))
+            if lock:
+                flash("BoM saved and locked.", "success")
+                return redirect(url_for("solar_view", sid=sid))
+            else:
+                flash("BoM saved.", "success")
+                return redirect(url_for("solar_bom_edit", sid=sid))
 
     bom = query("SELECT * FROM solar_sizing_bom WHERE sizing_id=%s ORDER BY line_no", (sid,))
     return render_template("solar/bom_edit.html", s=s, bom=bom)
