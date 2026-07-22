@@ -39,18 +39,22 @@
       <table class="table table-sm mb-0" id="bom-table">
         <thead>
           <tr>
-            <th style="width:38%">Description</th>
+            <th style="width:3%"></th>
+            <th style="width:36%">Description</th>
             <th style="width:8%">UoM</th>
             <th style="width:8%" class="text-end">Qty</th>
-            <th style="width:16%" class="text-end">Unit Price (UGX)</th>
-            <th style="width:16%" class="text-end">Total (UGX)</th>
-            <th style="width:6%"></th>
+            <th style="width:15%" class="text-end">Unit Price (UGX)</th>
+            <th style="width:15%" class="text-end">Total (UGX)</th>
+            <th style="width:5%"></th>
           </tr>
         </thead>
         <tbody id="bom-body">
           {% for item in bom %}
           <tr class="bom-row">
-            <td><input type="text" name="description[]" class="form-control form-control-sm" value="{{ item.description }}" required></td>
+            <td class="bom-handle align-middle text-center" draggable="true" title="Drag to reorder">
+              <i class="bi bi-grip-vertical text-muted"></i>
+            </td>
+            <td><input type="text" name="description[]" class="form-control form-control-sm bom-desc" list="bom-catalog-list" autocomplete="off" value="{{ item.description }}" required></td>
             <td>
               <select name="uom[]" class="form-select form-select-sm">
                 {% for u in ['pc','m','roll','lot','job','set','pair','box'] %}
@@ -71,14 +75,14 @@
         </tbody>
         <tfoot>
           <tr>
-            <td colspan="6" class="px-2 py-2">
+            <td colspan="7" class="px-2 py-2">
               <button type="button" class="btn btn-sm btn-outline-secondary" onclick="addRow()">
                 <i class="bi bi-plus-circle"></i> Add line
               </button>
             </td>
           </tr>
           <tr class="fw-bold border-top">
-            <td colspan="4" class="text-end">Total</td>
+            <td colspan="5" class="text-end">Total</td>
             <td class="text-end text-blue" id="bom-grand-total">—</td>
             <td></td>
           </tr>
@@ -105,17 +109,38 @@
 </div>
 </form>
 
+{# Catalog lookup data for description auto-fill #}
+<datalist id="bom-catalog-list">
+  {% for item in catalog %}
+  <option value="{{ item.name }}"></option>
+  {% endfor %}
+</datalist>
 <script>
+var _bomCatalog = [{% for item in catalog %}{"label":{{ item.name|tojson }},"uom":{{ (item.uom or 'pc')|tojson }},"price":{{ item.sell_price or 0 }}},{% endfor %}];
+var _bomCatalogByLabel = {};
+_bomCatalog.forEach(function(it){ _bomCatalogByLabel[it.label] = it; });
+</script>
+
+<style>
+.bom-handle { cursor: grab; user-select: none; }
+.bom-handle:active { cursor: grabbing; }
+.bom-row.bom-dragging { opacity: 0.35; }
+.bom-row.bom-over { outline: 2px solid #3b82f6; outline-offset: -1px; }
+</style>
+<script>
+const UOM_OPTIONS = ['pc','m','roll','lot','job','set','pair','box']
+  .map(u => `<option value="${u}">${u}</option>`).join('');
+
 // ── Row template for "Add line" ──────────────────────────────────────────────
 function addRow() {
-  const uomOptions = ['pc','m','roll','lot','job','set','pair','box']
-    .map(u => `<option value="${u}">${u}</option>`).join('');
-
   const tr = document.createElement('tr');
   tr.className = 'bom-row';
   tr.innerHTML = `
-    <td><input type="text" name="description[]" class="form-control form-control-sm" placeholder="Description" required></td>
-    <td><select name="uom[]" class="form-select form-select-sm">${uomOptions}</select></td>
+    <td class="bom-handle align-middle text-center" draggable="true" title="Drag to reorder">
+      <i class="bi bi-grip-vertical text-muted"></i>
+    </td>
+    <td><input type="text" name="description[]" class="form-control form-control-sm bom-desc" list="bom-catalog-list" autocomplete="off" placeholder="Description or search catalog..." required></td>
+    <td><select name="uom[]" class="form-select form-select-sm">${UOM_OPTIONS}</select></td>
     <td><input type="number" name="qty[]" class="form-control form-control-sm text-end bom-qty" value="1" min="0" step="0.01" oninput="recalcRow(this)"></td>
     <td><input type="number" name="unit_price[]" class="form-control form-control-sm text-end bom-price" value="0" min="0" oninput="recalcRow(this)"></td>
     <td class="text-end align-middle bom-row-total fw-semibold small">0</td>
@@ -155,7 +180,63 @@ function recalcTotal() {
   document.getElementById('bom-total-display').textContent = 'Total: ' + fmt;
 }
 
-// Run on load
+// ── Catalog auto-fill for description inputs ─────────────────────────────────
+document.getElementById('bom-body').addEventListener('change', function (e) {
+  const input = e.target.closest('.bom-desc');
+  if (!input) return;
+  const item = _bomCatalogByLabel[input.value.trim()];
+  if (!item) return;
+  const row = input.closest('tr');
+  // fill UoM select
+  const uomSel = row.querySelector('[name="uom[]"]');
+  if (uomSel) {
+    [...uomSel.options].forEach(opt => { opt.selected = opt.value === item.uom; });
+  }
+  // fill unit price and recalc
+  const priceInput = row.querySelector('.bom-price');
+  if (priceInput && item.price) {
+    priceInput.value = item.price;
+    recalcRow(priceInput);
+  }
+});
+
+// ── Drag-and-drop row reordering ─────────────────────────────────────────────
+(function () {
+  const tbody = document.getElementById('bom-body');
+  let dragSrc = null;
+
+  tbody.addEventListener('dragstart', function (e) {
+    const handle = e.target.closest('.bom-handle');
+    if (!handle) { e.preventDefault(); return; }
+    dragSrc = handle.closest('tr.bom-row');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', '');   // required for Firefox
+    setTimeout(() => dragSrc && dragSrc.classList.add('bom-dragging'), 0);
+  });
+
+  tbody.addEventListener('dragover', function (e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const target = e.target.closest('tr.bom-row');
+    if (!target || target === dragSrc) return;
+    // clear previous highlight
+    tbody.querySelectorAll('.bom-over').forEach(r => r.classList.remove('bom-over'));
+    target.classList.add('bom-over');
+    // insert above or below based on cursor position
+    const rect = target.getBoundingClientRect();
+    if (e.clientY < rect.top + rect.height / 2) {
+      tbody.insertBefore(dragSrc, target);
+    } else {
+      tbody.insertBefore(dragSrc, target.nextSibling);
+    }
+  });
+
+  tbody.addEventListener('dragend', function () {
+    tbody.querySelectorAll('.bom-over').forEach(r => r.classList.remove('bom-over'));
+    if (dragSrc) { dragSrc.classList.remove('bom-dragging'); dragSrc = null; }
+  });
+})();
+
 recalcTotal();
 </script>
 {% endblock %}

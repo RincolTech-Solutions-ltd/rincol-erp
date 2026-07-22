@@ -2489,8 +2489,9 @@ def solar_bom_edit(sid):
                 flash("BoM saved.", "success")
                 return redirect(url_for("solar_bom_edit", sid=sid))
 
-    bom = query("SELECT * FROM solar_sizing_bom WHERE sizing_id=%s ORDER BY line_no", (sid,))
-    return render_template("solar/bom_edit.html", s=s, bom=bom)
+    bom     = query("SELECT * FROM solar_sizing_bom WHERE sizing_id=%s ORDER BY line_no", (sid,))
+    catalog = query("SELECT id, name, uom, sell_price FROM catalog_items ORDER BY category, name")
+    return render_template("solar/bom_edit.html", s=s, bom=bom, catalog=catalog)
 
 
 # ── Telegram bot ───────────────────────────────────────────────────────────────
