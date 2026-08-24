@@ -1559,37 +1559,51 @@ def _parse_appliances_from_form(f):
     return appliances
 
 
+def _safe_float(val, default=0):
+    """Convert form value to float, handling empty strings and commas."""
+    if not val or val == '':
+        return float(default)
+    if isinstance(val, str):
+        val = val.replace(',', '')
+    return float(val)
+
+def _safe_int(val, default=0):
+    """Convert form value to int, handling empty strings."""
+    if not val or val == '':
+        return int(default)
+    return int(val)
+
 def _params_from_form(f):
     return {
-        "system_voltage":     int(f.get("system_voltage", 48)),
+        "system_voltage":     _safe_int(f.get("system_voltage"), 48),
         "battery_type":       f.get("battery_type", "Li-ion"),
-        "days_autonomy":      int(f.get("days_autonomy", 1)),
-        "dod":                float(f.get("dod", 0.80)),
-        "inverter_efficiency": float(f.get("inverter_efficiency", 0.90)),
-        "cable_efficiency":   float(f.get("cable_efficiency", 0.95)),
-        "inverter_idle_w":    float(f.get("inverter_idle_w", 50)),
-        "peak_sun_hours":     float(f.get("peak_sun_hours", 5.5)),
-        "performance_ratio":  float(f.get("performance_ratio", 0.75)),
-        "panel_wp":                          float(f.get("panel_wp", 550)),
-        "panel_voc":                         float(f.get("panel_voc", 40.0)),
-        "panel_isc":                         float(f.get("panel_isc", 0)),
-        "panel_cost":                        float(f.get("panel_cost", 0)),
-        "mppt_trackers":                     int(f.get("mppt_trackers", 1)),
-        "mppt_min_v":                        float(f.get("mppt_min_v", 0)),
-        "mppt_max_v":                        float(f.get("mppt_max_v", 0)),
-        "max_oc_v":                          float(f.get("max_oc_v", 0)),
-        "max_input_current_per_tracker":     float(f.get("max_input_current_per_tracker", 0)),
-        "max_isc_per_tracker":               float(f.get("max_isc_per_tracker", 0)),
-        "max_pv_power_per_tracker":          float(f.get("max_pv_power_per_tracker", 0)),
-        "battery_ah":         float(f.get("battery_ah", 200)),
-        "battery_voltage":    float(f.get("battery_voltage", 12)),
-        "battery_cost_each":  float(f.get("battery_cost_each", 0)),
-        "inverter_kw":        float(f.get("inverter_kw", 3.5)),
-        "inverter_cost":      float(f.get("inverter_cost", 0)),
-        "labour_transport":   float(f.get("labour_transport", 750000)),
+        "days_autonomy":      _safe_int(f.get("days_autonomy"), 1),
+        "dod":                _safe_float(f.get("dod"), 0.80),
+        "inverter_efficiency": _safe_float(f.get("inverter_efficiency"), 0.90),
+        "cable_efficiency":   _safe_float(f.get("cable_efficiency"), 0.95),
+        "inverter_idle_w":    _safe_float(f.get("inverter_idle_w"), 50),
+        "peak_sun_hours":     _safe_float(f.get("peak_sun_hours"), 5.5),
+        "performance_ratio":  _safe_float(f.get("performance_ratio"), 0.75),
+        "panel_wp":           _safe_float(f.get("panel_wp"), 550),
+        "panel_voc":          _safe_float(f.get("panel_voc"), 40.0),
+        "panel_isc":          _safe_float(f.get("panel_isc"), 0),
+        "panel_cost":         _safe_float(f.get("panel_cost"), 0),
+        "mppt_trackers":      _safe_int(f.get("mppt_trackers"), 1),
+        "mppt_min_v":         _safe_float(f.get("mppt_min_v"), 0),
+        "mppt_max_v":         _safe_float(f.get("mppt_max_v"), 0),
+        "max_oc_v":           _safe_float(f.get("max_oc_v"), 0),
+        "max_input_current_per_tracker": _safe_float(f.get("max_input_current_per_tracker"), 0),
+        "max_isc_per_tracker": _safe_float(f.get("max_isc_per_tracker"), 0),
+        "max_pv_power_per_tracker": _safe_float(f.get("max_pv_power_per_tracker"), 0),
+        "battery_ah":         _safe_float(f.get("battery_ah"), 200),
+        "battery_voltage":    _safe_float(f.get("battery_voltage"), 12),
+        "battery_cost_each":  _safe_float(f.get("battery_cost_each"), 0),
+        "inverter_kw":        _safe_float(f.get("inverter_kw"), 3.5),
+        "inverter_cost":      _safe_float(f.get("inverter_cost"), 0),
+        "labour_transport":   _safe_float(f.get("labour_transport"), 750000),
         "utility_provider":   f.get("utility_provider", "UEDCL"),
-        "utility_tariff":     float(f.get("utility_tariff", 897)),
-        "tariff_escalation":  float(f.get("tariff_escalation", 4.0)) / 100,  # convert % → decimal
+        "utility_tariff":     _safe_float(f.get("utility_tariff"), 897),
+        "tariff_escalation":  _safe_float(f.get("tariff_escalation"), 4.0) / 100,  # convert % → decimal
         "battery_is_bank":    f.get("battery_is_bank") == "1",
     }
 
