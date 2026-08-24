@@ -389,7 +389,23 @@ _custList.forEach(function(c){ _custById[c.id] = c; });
           {% for a in app_list %}
           {% set lt = a.load_type if a.load_type is defined else 'standard' %}
           <tr class="appliance-row" data-loadtype="{{ lt }}">
-            <td><input type="text" name="app_name[]" class="form-control form-control-sm" value="{{ a.name }}" required></td>
+            <td>
+              <input type="text" name="app_name[]" class="form-control form-control-sm app-name-input"
+                     list="appliance-list" autocomplete="off" value="{{ a.name }}" required
+                     placeholder="Search appliances...">
+              <datalist id="appliance-list">
+                <option value="LED Bulb (10W)"></option>
+                <option value="LED TV (55 inch)"></option>
+                <option value="Wi-Fi Router"></option>
+                <option value="Phone Charging"></option>
+                <option value="Laptop"></option>
+                <option value="Refrigerator (150L)"></option>
+                <option value="Water Pump (0.5HP)"></option>
+                <option value="Spotlights"></option>
+                <option value="HP Printer (VNH3528356)"></option>
+                <option value="Kettle"></option>
+              </datalist>
+            </td>
             <td>
               <select name="app_load_type[]" class="form-select form-select-sm app-loadtype">
                 <option value="standard" {% if lt == 'standard' %}selected{% endif %}>Standard</option>
@@ -549,7 +565,11 @@ _custList.forEach(function(c){ _custById[c.id] = c; });
     tr.className = 'appliance-row';
     tr.dataset.loadtype = 'standard';
     tr.innerHTML = `
-      <td><input type="text" name="app_name[]" class="form-control form-control-sm" required></td>
+      <td>
+        <input type="text" name="app_name[]" class="form-control form-control-sm app-name-input"
+               list="appliance-list" autocomplete="off" required
+               placeholder="Search appliances...">
+      </td>
       <td>
         <select name="app_load_type[]" class="form-select form-select-sm app-loadtype">
           <option value="standard" selected>Standard</option>
@@ -679,5 +699,37 @@ initCatalogSearch({
     if (cb) cb.checked = item.bank === 1;
   }
 });
+
+// ── Price formatting with commas ──────────────────────────────────────────
+(function() {
+  const priceFields = ['panel_cost', 'inverter_cost', 'battery_cost_each', 'labour_transport'];
+
+  priceFields.forEach(fieldName => {
+    const el = document.querySelector(`[name="${fieldName}"]`);
+    if (!el) return;
+
+    // Format on load
+    if (el.value) {
+      el.value = Math.round(parseFloat(el.value)).toLocaleString('en-US');
+    }
+
+    // Format on input
+    el.addEventListener('input', function() {
+      // Remove commas, parse, reformat
+      let val = this.value.replace(/,/g, '');
+      if (val) {
+        this.value = Math.round(parseFloat(val) || 0).toLocaleString('en-US');
+      }
+    });
+
+    // Strip commas on submit (form submission)
+    const form = el.closest('form');
+    if (form) {
+      form.addEventListener('submit', function() {
+        el.value = el.value.replace(/,/g, '');
+      });
+    }
+  });
+})();
 </script>
 {% endblock %}
