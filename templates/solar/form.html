@@ -414,55 +414,36 @@ var _applianceItems = [
               </select>
             </td>
             <td>
-              {# Standard: power_w field. Fridge: annual_kwh field shown instead #}
-              <div class="field-standard {% if lt == 'fridge' %}d-none{% endif %}">
-                <div class="input-group input-group-sm">
-                  <input type="number" name="app_power_w[]" class="form-control form-control-sm app-power"
-                         value="{{ a.power_w }}" min="0" step="1">
-                  <span class="input-group-text px-1 text-muted" style="font-size:.7rem">W</span>
-                </div>
-                {# hidden stubs for fridge fields to maintain array alignment #}
-                <input type="hidden" name="app_annual_kwh[]" class="app-annual-kwh-hidden" value="0">
-              </div>
-              <div class="field-fridge {% if lt != 'fridge' %}d-none{% endif %}">
-                <div class="input-group input-group-sm">
-                  <input type="number" name="app_annual_kwh[]" class="form-control form-control-sm app-annual-kwh"
-                         value="{{ a.annual_kwh if a.annual_kwh is defined else 0 }}" min="0" step="1">
-                  <span class="input-group-text px-1 text-muted" style="font-size:.65rem">kWh/yr</span>
-                </div>
-                {# hidden stub for power_w field to maintain array alignment #}
-                <input type="hidden" name="app_power_w[]" class="app-power-hidden" value="0">
+              {# Single field — toggled via JS, never hidden (prevents d-none submission bug) #}
+              <div class="input-group input-group-sm">
+                <input type="number" name="app_power_w[]" class="form-control form-control-sm app-power"
+                       value="{{ a.power_w }}" min="0" step="1" style="{% if lt == 'fridge' %}display:none{% endif %}">
+                <input type="number" name="app_annual_kwh[]" class="form-control form-control-sm app-annual-kwh"
+                       value="{{ a.annual_kwh if a.annual_kwh is defined else 0 }}" min="0" step="1"
+                       style="{% if lt != 'fridge' %}display:none{% endif %}">
+                <span class="input-group-text px-1 text-muted app-unit" style="font-size:.7rem">{% if lt == 'fridge' %}kWh/yr{% else %}W{% endif %}</span>
               </div>
             </td>
             <td>
-              <div class="field-standard {% if lt == 'fridge' %}d-none{% endif %}">
-                <select name="app_power_factor[]" class="form-select form-select-sm app-pf">
-                  {% for pf_val, pf_label in [('1.00','1.00'),('0.95','0.95'),('0.85','0.85')] %}
-                  <option value="{{ pf_val }}" {% if '{:.2f}'.format(a.power_factor|float) == pf_val %}selected{% endif %}>{{ pf_label }}</option>
-                  {% endfor %}
-                </select>
-              </div>
-              <div class="field-fridge {% if lt != 'fridge' %}d-none{% endif %}">
-                <input type="hidden" name="app_power_factor[]" value="1.00">
-                <span class="text-muted small">—</span>
-              </div>
+              <select name="app_power_factor[]" class="form-select form-select-sm app-pf"
+                      style="{% if lt == 'fridge' %}display:none{% endif %}">
+                {% for pf_val, pf_label in [('1.00','1.00'),('0.95','0.95'),('0.85','0.85')] %}
+                <option value="{{ pf_val }}" {% if '{:.2f}'.format(a.power_factor|float) == pf_val %}selected{% endif %}>{{ pf_label }}</option>
+                {% endfor %}
+              </select>
+              <input type="hidden" name="app_power_factor[]" value="1.00" style="{% if lt != 'fridge' %}display:none{% endif %}">
+              <span class="text-muted small" style="{% if lt != 'fridge' %}display:none{% endif %}">—</span>
             </td>
             <td><input type="number" name="app_qty[]" class="form-control form-control-sm app-qty"
                        value="{{ a.quantity }}" min="1" step="1"></td>
             <td>
-              {# Standard: hours. Fridge: peak_w (for inverter sizing) #}
-              <div class="field-standard {% if lt == 'fridge' %}d-none{% endif %}">
-                <input type="number" name="app_hours[]" class="form-control form-control-sm app-hours"
-                       value="{{ a.hours_per_day }}" min="0" max="24" step="0.5" placeholder="hrs">
-                {# hidden stub for peak_w field to maintain array alignment #}
-                <input type="hidden" name="app_peak_w[]" class="app-peak-w-hidden" value="0">
-              </div>
-              <div class="field-fridge {% if lt != 'fridge' %}d-none{% endif %}">
-                <input type="number" name="app_peak_w[]" class="form-control form-control-sm app-peak-w"
-                       value="{{ a.peak_w if a.peak_w is defined else 0 }}" min="0" step="1" placeholder="W peak">
-                {# hidden stub for hours field to maintain array alignment #}
-                <input type="hidden" name="app_hours[]" class="app-hours-hidden" value="0">
-              </div>
+              {# Single field set — toggled via JS, never hidden (prevents d-none submission bug) #}
+              <input type="number" name="app_hours[]" class="form-control form-control-sm app-hours"
+                     value="{{ a.hours_per_day }}" min="0" max="24" step="0.5" placeholder="hrs"
+                     style="{% if lt == 'fridge' %}display:none{% endif %}">
+              <input type="number" name="app_peak_w[]" class="form-control form-control-sm app-peak-w"
+                     value="{{ a.peak_w if a.peak_w is defined else 0 }}" min="0" step="1" placeholder="W peak"
+                     style="{% if lt != 'fridge' %}display:none{% endif %}">
             </td>
             <td><span class="app-wh text-muted small">{{ '{:.0f}'.format(a.daily_wh if a.daily_wh else 0) }}</span></td>
             <td class="text-center">
@@ -549,8 +530,30 @@ var _applianceItems = [
   // ── Toggle fridge / standard fields ─────────────────────────────────────
   function applyLoadType(row) {
     const lt = row.querySelector('.app-loadtype').value;
-    row.querySelectorAll('.field-standard').forEach(el => el.classList.toggle('d-none', lt === 'fridge'));
-    row.querySelectorAll('.field-fridge').forEach(el => el.classList.toggle('d-none', lt !== 'fridge'));
+    const isFridge = lt === 'fridge';
+
+    // Toggle power field visibility
+    const powerField = row.querySelector('.app-power');
+    const annualKwhField = row.querySelector('.app-annual-kwh');
+    if (powerField) powerField.style.display = isFridge ? 'none' : '';
+    if (annualKwhField) annualKwhField.style.display = isFridge ? '' : 'none';
+
+    // Update unit label
+    const unitLabel = row.querySelector('.app-unit');
+    if (unitLabel) unitLabel.textContent = isFridge ? 'kWh/yr' : 'W';
+
+    // Toggle power factor
+    const pfSelect = row.querySelector('.app-pf');
+    const pfHidden = row.querySelector('input[name="app_power_factor[]"][type="hidden"]');
+    if (pfSelect) pfSelect.style.display = isFridge ? 'none' : '';
+    if (pfHidden) pfHidden.style.display = isFridge ? '' : 'none';
+
+    // Toggle hours vs peak_w
+    const hoursField = row.querySelector('.app-hours');
+    const peakWField = row.querySelector('.app-peak-w');
+    if (hoursField) hoursField.style.display = isFridge ? 'none' : '';
+    if (peakWField) peakWField.style.display = isFridge ? '' : 'none';
+
     calcWh(row);
   }
 
@@ -583,44 +586,24 @@ var _applianceItems = [
         </select>
       </td>
       <td>
-        <div class="field-standard">
-          <div class="input-group input-group-sm">
-            <input type="number" name="app_power_w[]" class="form-control form-control-sm app-power" value="0" min="0" step="1">
-            <span class="input-group-text px-1 text-muted" style="font-size:.7rem">W</span>
-          </div>
-          <input type="hidden" name="app_annual_kwh[]" class="app-annual-kwh-hidden" value="0">
-        </div>
-        <div class="field-fridge d-none">
-          <div class="input-group input-group-sm">
-            <input type="number" name="app_annual_kwh[]" class="form-control form-control-sm app-annual-kwh" value="0" min="0" step="1">
-            <span class="input-group-text px-1 text-muted" style="font-size:.65rem">kWh/yr</span>
-          </div>
-          <input type="hidden" name="app_power_w[]" class="app-power-hidden" value="0">
+        <div class="input-group input-group-sm">
+          <input type="number" name="app_power_w[]" class="form-control form-control-sm app-power" value="0" min="0" step="1">
+          <input type="number" name="app_annual_kwh[]" class="form-control form-control-sm app-annual-kwh" value="0" min="0" step="1" style="display:none">
+          <span class="input-group-text px-1 text-muted app-unit" style="font-size:.7rem">W</span>
         </div>
       </td>
       <td>
-        <div class="field-standard">
-          <select name="app_power_factor[]" class="form-select form-select-sm app-pf">
-            <option value="1.00">1.00</option>
-            <option value="0.95">0.95</option>
-            <option value="0.85" selected>0.85</option>
-          </select>
-        </div>
-        <div class="field-fridge d-none">
-          <input type="hidden" name="app_power_factor[]" value="1.00">
-          <span class="text-muted small">—</span>
-        </div>
+        <select name="app_power_factor[]" class="form-select form-select-sm app-pf">
+          <option value="1.00">1.00</option>
+          <option value="0.95">0.95</option>
+          <option value="0.85" selected>0.85</option>
+        </select>
+        <input type="hidden" name="app_power_factor[]" value="1.00" style="display:none">
       </td>
       <td><input type="number" name="app_qty[]" class="form-control form-control-sm app-qty" value="1" min="1" step="1"></td>
       <td>
-        <div class="field-standard">
-          <input type="number" name="app_hours[]" class="form-control form-control-sm app-hours" value="0" min="0" max="24" step="0.5" placeholder="hrs">
-          <input type="hidden" name="app_peak_w[]" class="app-peak-w-hidden" value="0">
-        </div>
-        <div class="field-fridge d-none">
-          <input type="number" name="app_peak_w[]" class="form-control form-control-sm app-peak-w" value="0" min="0" step="1" placeholder="W peak">
-          <input type="hidden" name="app_hours[]" class="app-hours-hidden" value="0">
-        </div>
+        <input type="number" name="app_hours[]" class="form-control form-control-sm app-hours" value="0" min="0" max="24" step="0.5" placeholder="hrs">
+        <input type="number" name="app_peak_w[]" class="form-control form-control-sm app-peak-w" value="0" min="0" step="1" placeholder="W peak" style="display:none">
       </td>
       <td><span class="app-wh text-muted small">0</span></td>
       <td class="text-center">
