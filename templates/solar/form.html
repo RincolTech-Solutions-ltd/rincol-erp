@@ -360,6 +360,19 @@ _custList.forEach(function(c){ _custById[c.id] = c; });
 </div>
 
 {# ── APPLIANCE LIST ────────────────────────────────────────────────────────── #}
+<script>
+{# Appliance catalog — auto-populate from form defaults #}
+var _applianceItems = [
+  {"label":"LED Bulb (10W)","power_w":10,"power_factor":0.95,"qty":6,"hours_per_day":6,"load_type":"standard"},
+  {"label":"LED TV (55 inch)","power_w":80,"power_factor":0.85,"qty":1,"hours_per_day":5,"load_type":"standard"},
+  {"label":"Wi-Fi Router","power_w":12,"power_factor":0.85,"qty":1,"hours_per_day":18,"load_type":"standard"},
+  {"label":"Phone Charging","power_w":15,"power_factor":0.85,"qty":3,"hours_per_day":2,"load_type":"standard"},
+  {"label":"Laptop","power_w":65,"power_factor":0.85,"qty":1,"hours_per_day":4,"load_type":"standard"},
+  {"label":"Refrigerator (150L)","annual_kwh":200,"peak_w":300,"qty":1,"load_type":"fridge"},
+  {"label":"Water Pump (0.5HP)","power_w":400,"power_factor":0.85,"qty":1,"hours_per_day":1,"load_type":"standard"}
+];
+</script>
+
 <div class="card mb-3">
   <div class="card-header d-flex justify-content-between align-items-center">
     <span class="section-header mb-0">Appliance Load List</span>
@@ -391,20 +404,8 @@ _custList.forEach(function(c){ _custById[c.id] = c; });
           <tr class="appliance-row" data-loadtype="{{ lt }}">
             <td>
               <input type="text" name="app_name[]" class="form-control form-control-sm app-name-input"
-                     list="appliance-list" autocomplete="off" value="{{ a.name }}" required
-                     placeholder="Search appliances...">
-              <datalist id="appliance-list">
-                <option value="LED Bulb (10W)"></option>
-                <option value="LED TV (55 inch)"></option>
-                <option value="Wi-Fi Router"></option>
-                <option value="Phone Charging"></option>
-                <option value="Laptop"></option>
-                <option value="Refrigerator (150L)"></option>
-                <option value="Water Pump (0.5HP)"></option>
-                <option value="Spotlights"></option>
-                <option value="HP Printer (VNH3528356)"></option>
-                <option value="Kettle"></option>
-              </datalist>
+                     autocomplete="off" value="{{ a.name }}" required
+                     placeholder="Search catalog...">
             </td>
             <td>
               <select name="app_load_type[]" class="form-select form-select-sm app-loadtype">
@@ -699,6 +700,59 @@ initCatalogSearch({
     if (cb) cb.checked = item.bank === 1;
   }
 });
+
+// ── Appliance catalog search (auto-populate specs in the current row) ───────
+(function() {
+  const applianceInputs = document.querySelectorAll('.app-name-input');
+
+  applianceInputs.forEach((input, idx) => {
+    // Create datalist for this row if it doesn't exist
+    const listId = `app-catalog-list-${idx}`;
+    if (!document.getElementById(listId)) {
+      const datalist = document.createElement('datalist');
+      datalist.id = listId;
+      _applianceItems.forEach(item => {
+        const opt = document.createElement('option');
+        opt.value = item.label;
+        datalist.appendChild(opt);
+      });
+      document.body.appendChild(datalist);
+    }
+    input.setAttribute('list', listId);
+
+    // Auto-populate row specs when appliance is selected
+    input.addEventListener('change', function() {
+      const selectedName = this.value.trim();
+      const item = _applianceItems.find(a => a.label === selectedName);
+      if (!item) return;
+
+      const row = this.closest('.appliance-row');
+      const loadTypeSelect = row.querySelector('.app-loadtype');
+
+      // Set load type
+      if (item.load_type) {
+        loadTypeSelect.value = item.load_type;
+        loadTypeSelect.dispatchEvent(new Event('change'));
+      }
+
+      // Set specs based on load type
+      if (item.load_type === 'fridge') {
+        row.querySelector('.app-annual-kwh').value = item.annual_kwh || 0;
+        row.querySelector('.app-peak-w').value = item.peak_w || 0;
+      } else {
+        row.querySelector('.app-power').value = item.power_w || 0;
+        row.querySelector('.app-hours').value = item.hours_per_day || 0;
+      }
+
+      row.querySelector('.app-qty').value = item.qty || 1;
+      row.querySelector('.app-pf').value = (item.power_factor || 1.0).toFixed(2);
+
+      // Recalculate Wh for this row
+      const event = new Event('input');
+      row.dispatchEvent(event);
+    });
+  });
+})();
 
 // ── Price formatting with commas ──────────────────────────────────────────
 (function() {
