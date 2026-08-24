@@ -1498,7 +1498,9 @@ _DEFAULT_APPLIANCES = [
 
 
 def _parse_appliances_from_form(f):
-    """Extract appliance rows from form POST data."""
+    """Extract appliance rows from form POST data.
+    Uses sentinels to group fields by row, bypassing array index alignment issues.
+    """
     names      = f.getlist("app_name[]")
     load_types = f.getlist("app_load_type[]")
     powers     = f.getlist("app_power_w[]")
@@ -1521,20 +1523,37 @@ def _parse_appliances_from_form(f):
             included_flags.append(False)
 
     appliances = []
-    for i, name in enumerate(names):
-        if not name.strip():
+    # Group fields by sentinel (row index), not by parallel array alignment
+    for row_idx, sentinel in enumerate(sentinels):
+        if row_idx >= len(names):
+            break
+
+        name = names[row_idx].strip() if row_idx < len(names) else ""
+        if not name:
             continue
-        lt = load_types[i] if i < len(load_types) else 'standard'
+
+        lt = load_types[row_idx] if row_idx < len(load_types) else 'standard'
+
+        # For each field, use row_idx to get the corresponding value
+        # This groups fields by row position, not by array index
+        power_w = float(powers[row_idx] or 0) if row_idx < len(powers) else 0
+        annual_kwh = float(annual_kwhs[row_idx] or 0) if row_idx < len(annual_kwhs) else 0
+        peak_w = float(peak_ws[row_idx] or 0) if row_idx < len(peak_ws) else 0
+        pf = float(pfs[row_idx] or 1.0) if row_idx < len(pfs) else 1.0
+        qty = int(qtys[row_idx] or 1) if row_idx < len(qtys) else 1
+        hrs = float(hours[row_idx] or 0) if row_idx < len(hours) else 0
+        included = included_flags[row_idx] if row_idx < len(included_flags) else True
+
         appliances.append({
-            "name":          name.strip(),
+            "name":          name,
             "load_type":     lt,
-            "power_w":       float(powers[i] or 0) if i < len(powers) else 0,
-            "annual_kwh":    float(annual_kwhs[i] or 0) if i < len(annual_kwhs) else 0,
-            "peak_w":        float(peak_ws[i] or 0) if i < len(peak_ws) else 0,
-            "power_factor":  float(pfs[i] or 1.0) if i < len(pfs) else 1.0,
-            "quantity":      int(qtys[i] or 1) if i < len(qtys) else 1,
-            "hours_per_day": float(hours[i] or 0) if i < len(hours) else 0,
-            "included":      included_flags[i] if i < len(included_flags) else True,
+            "power_w":       power_w,
+            "annual_kwh":    annual_kwh,
+            "peak_w":        peak_w,
+            "power_factor":  pf,
+            "quantity":      qty,
+            "hours_per_day": hrs,
+            "included":      included,
             "daily_wh":      0,
         })
     return appliances
