@@ -1,0 +1,71 @@
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# One deploy at a time; never cancel a deploy mid-flight.
+concurrency:
+  group: rincol-erp-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy-prod:
+    runs-on: ubuntu-latest
+    steps:
+      - name: set up SSH (dedicated CI deploy key + pinned host key)
+        env:
+          SSH_KEY: ${{ secrets.HETZNER_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.HETZNER_KNOWN_HOSTS }}
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key && chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts && chmod 644 ~/.ssh/known_hosts
+
+      - name: deploy app code on the box (git-only, self-rolling-back)
+        env:
+          HOST: ${{ secrets.HETZNER_HOST }}
+          USER: ${{ secrets.HETZNER_USER }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -o UserKnownHostsFile=~/.ssh/known_hosts "${USER}@${HOST}" bash -s <<'REMOTE'
+          set -euo pipefail
+          cd /opt/rincol-erp-hetzner
+
+          PREV_SHA="$(git rev-parse HEAD)"
+          PREV_REQS="$(git show HEAD:requirements.txt 2>/dev/null || true)"
+
+          git fetch origin main -q
+          git reset --hard origin/main
+
+          NEW_REQS="$(cat requirements.txt)"
+          if [ "$PREV_REQS" != "$NEW_REQS" ]; then
+            echo "requirements.txt changed — installing"
+            venv/bin/pip install -q -r requirements.txt
+          fi
+
+          systemctl restart rincol-erp
+
+          sleep 2
+          code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1:8003/ || echo 000)"
+          case "$code" in
+            2*|3*)
+              echo "health check ok (HTTP ${code})"
+              ;;
+            *)
+              echo "health check FAILED (HTTP ${code}) — rolling back to ${PREV_SHA}"
+              git reset --hard "$PREV_SHA"
+              if [ "$PREV_REQS" != "$NEW_REQS" ]; then
+                venv/bin/pip install -q -r requirements.txt
+              fi
+              systemctl restart rincol-erp
+              exit 1
+              ;;
+          esac
+          REMOTE
+
+      - name: verify erp.rincoltech.com answers
+        run: |
+          code="$(curl -s -o /dev/null -w '%{http_code}' https://erp.rincoltech.com/ || echo 000)"
+          echo "erp.rincoltech.com -> $code"
+          case "$code" in 2*|3*) :;; *) echo "unexpected"; exit 1;; esac
