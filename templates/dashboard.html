@@ -37,7 +37,7 @@
       <div class="d-flex justify-content-between align-items-start">
         <div>
           <div class="stat-label">Outstanding (UGX)</div>
-          <div class="stat-value money" style="color:#f87171;font-size:1.2rem">{{ '{:,.0f}'.format(stats.outstanding) }}</div>
+          <div class="stat-value money" style="color:#f87171;font-size:1.2rem">{{ '{:,.0f}'.format(stats.outstanding) }} ({{ stats.outstanding_count }})</div>
         </div>
         <i class="bi bi-cash-coin stat-icon" style="color:#f87171"></i>
       </div>
@@ -55,6 +55,17 @@
       <div class="mt-2" style="font-size:0.75rem;color:#a5adcb">
         Draft: {{ '{:,.0f}'.format(stats.draft_total) }} ({{ stats.draft }}) &middot;
         Pending: {{ '{:,.0f}'.format(stats.pending_total) }} ({{ stats.pending }})
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="stat-card" style="background:rgba(255,100,100,.1);border:1px solid rgba(255,100,100,.2)">
+      <div class="d-flex justify-content-between align-items-start">
+        <div>
+          <div class="stat-label">Cancelled (UGX)</div>
+          <div class="stat-value money" style="color:#f87171;font-size:1.2rem">{{ '{:,.0f}'.format(stats.cancelled_total) }} ({{ stats.cancelled }})</div>
+        </div>
+        <i class="bi bi-x-circle stat-icon" style="color:#f87171"></i>
       </div>
     </div>
   </div>
