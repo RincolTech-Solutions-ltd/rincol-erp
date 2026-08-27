@@ -459,7 +459,25 @@ function _matchesFilterWord(text, f) {
   const escaped = f.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return new RegExp('\\b' + escaped + '\\b').test(text);
 }
-function _applyFilter(tbody, q, filters) {
+// summaryOpts (optional): { id: '<element id>', amountSelector: '<css selector for the money cell>' }
+// Recomputes sum + count of the currently-visible rows into that element,
+// so the summary always matches whatever filter is active — no separate
+// "totals" endpoint or reload needed.
+function _updateFilterSummary(tbody, summaryOpts) {
+  if (!summaryOpts) return;
+  const el = document.getElementById(summaryOpts.id);
+  if (!el) return;
+  let total = 0, count = 0;
+  Array.from(tbody.rows).forEach(function (row) {
+    if (row.cells.length <= 1 || row.style.display === 'none') return;
+    const cell = row.querySelector(summaryOpts.amountSelector);
+    if (!cell) return;
+    total += parseFloat(cell.textContent.replace(/,/g, '')) || 0;
+    count++;
+  });
+  el.textContent = fmt(total) + ' UGX (' + count + ')';
+}
+function _applyFilter(tbody, q, filters, summaryOpts) {
   Array.from(tbody.rows).forEach(function (row) {
     if (row.cells.length <= 1) return;
     const text = row.textContent.toLowerCase();
@@ -467,18 +485,20 @@ function _applyFilter(tbody, q, filters) {
     const matchesAll = filters.every(f => !f || _matchesFilterWord(text, f));
     row.style.display = (matchesQ && matchesAll) ? '' : 'none';
   });
+  _updateFilterSummary(tbody, summaryOpts);
 }
-function liveSearch(inputId, tbodyId) {
+function liveSearch(inputId, tbodyId, summaryOpts) {
   const inp   = document.getElementById(inputId);
   const tbody = document.getElementById(tbodyId);
   if (!inp || !tbody) return;
   inp.addEventListener('input', function () {
-    _applyFilter(tbody, this.value.toLowerCase().trim(), []);
+    _applyFilter(tbody, this.value.toLowerCase().trim(), [], summaryOpts);
   });
+  _updateFilterSummary(tbody, summaryOpts);
 }
 // selectIds: a single element id, or an array of ids (one page can combine
 // several dropdowns — e.g. status + payment — with the same text search).
-function liveFilter(inputId, selectIds, tbodyId) {
+function liveFilter(inputId, selectIds, tbodyId, summaryOpts) {
   const inp   = inputId ? document.getElementById(inputId) : null;
   const ids   = Array.isArray(selectIds) ? selectIds : [selectIds];
   const sels  = ids.filter(Boolean).map(id => document.getElementById(id)).filter(Boolean);
@@ -486,8 +506,9 @@ function liveFilter(inputId, selectIds, tbodyId) {
   if (!tbody) return;
   function apply() {
     const filters = sels.map(s => s.value.toLowerCase().trim());
-    _applyFilter(tbody, inp ? inp.value.toLowerCase().trim() : '', filters);
+    _applyFilter(tbody, inp ? inp.value.toLowerCase().trim() : '', filters, summaryOpts);
   }
   inp?.addEventListener('input', apply);
   sels.forEach(s => s.addEventListener('change', apply));
+  _updateFilterSummary(tbody, summaryOpts);
 }
