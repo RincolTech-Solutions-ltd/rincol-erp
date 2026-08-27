@@ -13,6 +13,7 @@ concurrency:
 jobs:
   deploy-prod:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: set up SSH (dedicated CI deploy key + pinned host key)
         env:
@@ -26,40 +27,62 @@ jobs:
       - name: deploy app code on the box (git-only, self-rolling-back)
         env:
           HOST: ${{ secrets.HETZNER_HOST }}
-          USER: ${{ secrets.HETZNER_USER }}
+          SSH_USER: ${{ secrets.HETZNER_USER }}
         run: |
-          ssh -i ~/.ssh/deploy_key -o UserKnownHostsFile=~/.ssh/known_hosts "${USER}@${HOST}" bash -s <<'REMOTE'
-          set -euo pipefail
+          ssh -i ~/.ssh/deploy_key -o UserKnownHostsFile=~/.ssh/known_hosts \
+              -o BatchMode=yes -o ConnectTimeout=10 \
+              "${SSH_USER}@${HOST}" bash -s <<'REMOTE'
+          set -uo pipefail
           cd /opt/rincol-erp-hetzner
 
           PREV_SHA="$(git rev-parse HEAD)"
           PREV_REQS="$(git show HEAD:requirements.txt 2>/dev/null || true)"
+          echo "--- uncommitted state before reset (should be empty) ---"
+          git status --porcelain
 
-          git fetch origin main -q
-          git reset --hard origin/main
+          rollback() {
+            echo "rolling back to ${PREV_SHA}"
+            git reset --hard "$PREV_SHA"
+            NOW_REQS="$(cat requirements.txt 2>/dev/null || true)"
+            if [ "$PREV_REQS" != "$NOW_REQS" ]; then
+              venv/bin/pip install -q -r requirements.txt
+            fi
+            systemctl restart rincol-erp
+          }
+
+          if ! git fetch origin main -q; then
+            echo "git fetch FAILED — box untouched, nothing to roll back"; exit 1
+          fi
+          if ! git reset --hard origin/main; then
+            echo "git reset FAILED"; rollback; exit 1
+          fi
 
           NEW_REQS="$(cat requirements.txt)"
           if [ "$PREV_REQS" != "$NEW_REQS" ]; then
             echo "requirements.txt changed — installing"
-            venv/bin/pip install -q -r requirements.txt
+            if ! venv/bin/pip install -q -r requirements.txt; then
+              echo "pip install FAILED"; rollback; exit 1
+            fi
           fi
 
-          systemctl restart rincol-erp
+          if ! systemctl restart rincol-erp; then
+            echo "systemctl restart FAILED"; rollback; exit 1
+          fi
 
-          sleep 2
-          code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1:8003/ || echo 000)"
+          # Poll instead of a single fixed-delay check — a cold restart can
+          # take longer than 2s, especially right after a dependency install.
+          code=000
+          for _ in $(seq 1 15); do
+            sleep 2
+            code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1:8003/ || echo 000)"
+            case "$code" in 2*|3*) break ;; esac
+          done
           case "$code" in
             2*|3*)
               echo "health check ok (HTTP ${code})"
               ;;
             *)
-              echo "health check FAILED (HTTP ${code}) — rolling back to ${PREV_SHA}"
-              git reset --hard "$PREV_SHA"
-              if [ "$PREV_REQS" != "$NEW_REQS" ]; then
-                venv/bin/pip install -q -r requirements.txt
-              fi
-              systemctl restart rincol-erp
-              exit 1
+              echo "health check FAILED (HTTP ${code})"; rollback; exit 1
               ;;
           esac
           REMOTE
