@@ -89,6 +89,17 @@ A commit without a traceable Epic is a smell (or a Chore, marked with `chore:` p
 - **GitHub Milestones:** Phase buckets (Phase 1, Phase 2, Phase 3)
 - **GitHub Actions:** linked-issue-guard CI, tests, lint
 
+## Deploy pipeline split (two repos, two keys, two concerns)
+
+Deploying `rincol-erp` to the Hetzner box is split across two independent CI pipelines, each with its own dedicated SSH key on the box's root `authorized_keys`. They never touch the other's concern:
+
+| Concern | Owner | Trigger | Key |
+|---|---|---|---|
+| Nginx vhost, systemd **unit file**, TLS cert wiring | `rincol-deploy` repo (`scripts/deploy.sh`) | push to `rincol-deploy` main | `rincol-deploy-ci@github-actions` |
+| App **code**: `git reset --hard origin/main`, `pip install`, `systemctl restart` | `rincol-erp` repo (`.github/workflows/deploy.yml`) | push to `rincol-erp` main | `rincol-erp-ci@github-actions` |
+
+A normal code change (this repo) only ever triggers the second pipeline. The first only runs when the systemd unit template or nginx config changes in `rincol-deploy`. Keeping them separate avoids one script having to reason about both infra and app-code failure modes at once.
+
 ## Getting Started
 
 1. **Pick an issue** from the backlog (not scheduled → Phase 1 now; later phases → when scheduled)
