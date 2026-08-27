@@ -108,6 +108,16 @@ def dashboard():
             "           WHERE quotation_id IS NOT NULL GROUP BY quotation_id) r "
             "  ON r.quotation_id=q.id "
             "WHERE q.status IN ('Approved','In Progress','Completed')")["n"],
+        "outstanding_count": query_one(
+            "SELECT COUNT(*) AS n "
+            "FROM quotations q "
+            "LEFT JOIN (SELECT quotation_id, SUM(amount_paid) AS paid FROM receipts "
+            "           WHERE quotation_id IS NOT NULL GROUP BY quotation_id) r "
+            "  ON r.quotation_id=q.id "
+            "WHERE q.status IN ('Approved','In Progress','Completed') "
+            "  AND q.total_amount - COALESCE(r.paid,0) > 0")["n"],
+        "cancelled":       query_one("SELECT COUNT(*) AS n FROM quotations WHERE status='Cancelled'")["n"],
+        "cancelled_total": query_one("SELECT COALESCE(SUM(total_amount),0) AS n FROM quotations WHERE status='Cancelled'")["n"],
         "maintenance": query_one("SELECT COUNT(*) AS n FROM maintenance_records WHERE status IN ('Scheduled','Open','In Progress','Pending Parts')")["n"],
         "tasks_due":   query_one(
             "SELECT COUNT(*) AS n FROM tasks WHERE status != 'Done' AND due_date <= CURRENT_DATE + 3")["n"],
