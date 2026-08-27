@@ -8,11 +8,12 @@ workspace "Rincol Web ERP" "Business management system for Rincol Tech Solutions
         customer = person "Customer" "End customer. Views account statement via a token-gated public link (no login required). Receives quotation, receipt, and statement emails." "External"
 
         # ── External systems ──────────────────────────────────────────────────
-        supabase  = softwareSystem "Supabase" "Managed PostgreSQL database + Auth (JWT). Hosts all ERP data including customers, quotations, receipts, maintenance, balancing, solar sizings, catalog, and tasks." "External"
+        supabase  = softwareSystem "Supabase Auth" "JWT-based login/logout only. Business data no longer lives here — migrated to self-hosted Postgres 2026-08-13 after the Supabase free-tier project paused." "External"
+        postgres  = softwareSystem "Hetzner PostgreSQL 16" "Self-hosted database (89.167.121.193:5432). Hosts all ERP business data: customers, quotations, receipts, maintenance, balancing, solar sizings, catalog, and tasks." "External"
         sendgrid  = softwareSystem "SendGrid (Twilio)" "Transactional email delivery via HTTPS API. Single Sender Verification — rincoltech@gmail.com. No SMTP, no DNS required. Free tier 100 emails/day." "External"
         telegram  = softwareSystem "Telegram Bot API" "Push notifications to group channel and personal DMs for Hillary and Dennis. Two-way interaction via inline keyboards (approve quotation, update status, log notes)." "External"
-        render    = softwareSystem "Render" "PaaS hosting for the Flask app. Free tier. Auto-deploys from GitHub main branch. Gunicorn WSGI server." "External"
-        github    = softwareSystem "GitHub" "Source control. arindakhill/rincol-erp (private). Push to main triggers Render auto-deploy." "External"
+        hetzner   = softwareSystem "Hetzner VPS" "Self-hosted box (89.167.121.193), shared with other Rincol/family apps. Flask app runs as a native systemd service (gunicorn, 127.0.0.1:8003) behind system Nginx. Served at erp.rincoltech.com. No Docker for this app." "External"
+        github    = softwareSystem "GitHub" "RincolTech-Solutions-ltd/rincol-erp — PUBLIC repo (made public 2026-08-27 to get unlimited free GitHub Actions minutes; no secrets/PII committed). Two independent push-to-deploy CI pipelines target the Hetzner box, each with its own dedicated SSH key: this repo's own workflow (git reset + pip install + systemctl restart for app code) and the separate rincol-deploy repo (nginx vhost + systemd unit template, infra only). A linked-issue-guard check is required on every PR." "External"
 
         # ── Rincol ERP system ─────────────────────────────────────────────────
         erp = softwareSystem "Rincol Web ERP" "Flask-based business management system for Rincol Tech Solutions. Manages the full lifecycle from customer KYC through quotation, job execution, receipt, maintenance, and profit balancing." {
@@ -49,18 +50,20 @@ workspace "Rincol Web ERP" "Business management system for Rincol Tech Solutions
         customer -> erp "Views account statement, downloads PDF" "HTTPS browser (token link)"
 
         # ── Relationships — System → External ─────────────────────────────────
-        erp -> supabase  "Reads/writes all business data" "PostgreSQL / psycopg2"
+        erp -> supabase  "Login/logout only (JWT)" "HTTPS / Supabase Auth"
+        erp -> postgres  "Reads/writes all business data" "PostgreSQL / psycopg2"
         erp -> sendgrid  "Sends transactional emails with PDF attachments" "HTTPS / SendGrid Web API v3"
         erp -> telegram  "Sends notifications and receives bot callbacks" "HTTPS / Telegram Bot API"
-        erp -> render    "Deployed and hosted on"
-        erp -> github    "Source code, auto-deploy triggers"
+        erp -> hetzner   "Deployed and hosted on (systemd + gunicorn + Nginx)"
+        erp -> github    "Source code; push to main auto-deploys via dedicated CI"
 
         # ── Relationships — Container internal ────────────────────────────────
         hillary  -> webApp "Uses via browser"
         dennis   -> webApp "Uses via browser / mobile"
         customer -> webApp "Views public statement"
 
-        webApp -> supabase "Auth + DB queries" "PostgreSQL / psycopg2"
+        webApp -> supabase "Login/logout (JWT)" "HTTPS"
+        webApp -> postgres "DB queries" "PostgreSQL / psycopg2"
         webApp -> sendgrid "Email delivery" "HTTPS"
         webApp -> telegram "Notifications + bot" "HTTPS"
 
@@ -93,7 +96,7 @@ workspace "Rincol Web ERP" "Business management system for Rincol Tech Solutions
         notifyUtil      -> telegram    "Send messages + keyboards"
         tgBot           -> dbUtil      "Update quotation/task status from bot callback"
         tgBot           -> notifyUtil  "Fire confirmation notifications"
-        dbUtil          -> supabase    "SQL via psycopg2 connection pool"
+        dbUtil          -> postgres    "SQL via psycopg2 connection pool"
     }
 
     views {
@@ -111,7 +114,7 @@ workspace "Rincol Web ERP" "Business management system for Rincol Tech Solutions
             include *
             autoLayout lr
             title "Rincol Web ERP — Containers"
-            description "The Flask web app is the single deployable unit. All data lives in Supabase. Email via SendGrid, notifications via Telegram."
+            description "The Flask web app is the single deployable unit. All business data lives in self-hosted Hetzner PostgreSQL; Supabase is retained for login only. Email via SendGrid, notifications via Telegram."
         }
 
         # ── Component view ─────────────────────────────────────────────────────
