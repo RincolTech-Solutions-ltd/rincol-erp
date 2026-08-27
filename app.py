@@ -105,7 +105,7 @@ def dashboard():
             "LEFT JOIN (SELECT quotation_id, SUM(amount_paid) AS paid FROM receipts "
             "           WHERE quotation_id IS NOT NULL GROUP BY quotation_id) r "
             "  ON r.quotation_id=q.id "
-            "WHERE q.status NOT IN ('Cancelled','Pending')")["n"],
+            "WHERE q.status IN ('Approved','In Progress','Completed')")["n"],
         "maintenance": query_one("SELECT COUNT(*) AS n FROM maintenance_records WHERE status IN ('Scheduled','Open','In Progress','Pending Parts')")["n"],
         "tasks_due":   query_one(
             "SELECT COUNT(*) AS n FROM tasks WHERE status != 'Done' AND due_date <= CURRENT_DATE + 3")["n"],
@@ -2563,8 +2563,10 @@ def _customer_stats(cid: str) -> dict:
             COUNT(q.id)                                          AS job_count,
             COALESCE(SUM(q.total_amount), 0)                    AS total_quoted,
             COALESCE(SUM(r.paid), 0)                            AS total_collected,
-            COALESCE(SUM(q.total_amount), 0)
-              - COALESCE(SUM(r.paid), 0)                        AS total_outstanding
+            COALESCE(SUM(
+              CASE WHEN q.status IN ('Approved','In Progress','Completed')
+                   THEN q.total_amount - COALESCE(r.paid, 0) ELSE 0 END
+            ), 0)                                                AS total_outstanding
         FROM quotations q
         LEFT JOIN (
             SELECT quotation_id, SUM(amount_paid) AS paid
@@ -2603,7 +2605,10 @@ def customers_list():
     sql = """
         SELECT c.id, c.customer_no, c.name, c.phone, c.email,
                COUNT(q.id) AS job_count,
-               COALESCE(SUM(q.total_amount),0) - COALESCE(SUM(r.paid),0) AS outstanding
+               COALESCE(SUM(
+                 CASE WHEN q.status IN ('Approved','In Progress','Completed')
+                      THEN q.total_amount - COALESCE(r.paid,0) ELSE 0 END
+               ),0) AS outstanding
         FROM customers c
         LEFT JOIN quotations q ON q.customer_id = c.id AND q.status != 'Cancelled'
         LEFT JOIN (
