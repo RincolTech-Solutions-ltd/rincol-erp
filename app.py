@@ -16,6 +16,19 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.environ["FLASK_SECRET_KEY"]
 
+
+@app.template_global()
+def asset_v(filename):
+    """Cache-busting query param for a static asset, based on its mtime.
+    Without this, browsers/CDN hold onto a stale cached JS/CSS file across
+    deploys (static/js/main.js is served with a 4h Cache-Control) and users
+    silently keep running old code until they hard-refresh."""
+    path = os.path.join(app.static_folder, filename)
+    try:
+        return int(os.path.getmtime(path))
+    except OSError:
+        return 0
+
 SUPABASE_URL  = os.environ["SUPABASE_URL"]
 SUPABASE_KEY  = os.environ["SUPABASE_ANON_KEY"]
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
