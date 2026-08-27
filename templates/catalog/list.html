@@ -8,23 +8,19 @@
   <a href="{{ url_for('catalog_edit') }}" class="btn btn-primary btn-sm"><i class="bi bi-plus"></i> Add Item</a>
 </div>
 
-<form method="get" class="row g-2 mb-3">
+<div class="row g-2 mb-3">
   <div class="col-auto">
-    <input type="text" name="q" class="form-control form-control-sm" placeholder="Search name/spec" value="{{ search }}">
+    <input type="text" id="q_search" class="form-control form-control-sm" placeholder="Search name/spec">
   </div>
   <div class="col-auto">
-    <select name="cat" class="form-select form-select-sm">
+    <select id="cat_filter" class="form-select form-select-sm">
       <option value="">All categories</option>
       {% for c in categories %}
-      <option value="{{ c }}" {% if cat==c %}selected{% endif %}>{{ c }}</option>
+      <option value="{{ c }}">{{ c }}</option>
       {% endfor %}
     </select>
   </div>
-  <div class="col-auto">
-    <button type="submit" class="btn btn-sm btn-outline-secondary">Filter</button>
-    <a href="{{ url_for('catalog_list') }}" class="btn btn-sm btn-outline-secondary ms-1">Clear</a>
-  </div>
-</form>
+</div>
 
 <div class="card">
   <div class="card-body p-0">
@@ -33,7 +29,7 @@
         <thead>
           <tr><th>ID</th><th>Category</th><th>Name</th><th>Spec</th><th>UOM</th><th class="text-end">Buy (UGX)</th><th class="text-end">Sell (UGX)</th><th></th></tr>
         </thead>
-        <tbody>
+        <tbody id="catalog-tbody">
           {% for it in items %}
           <tr>
             <td class="text-muted small font-monospace">{{ it.id }}</td>
@@ -60,3 +56,4 @@
   </div>
 </div>
 {% endblock %}
+{% block scripts %}<script>liveFilter('q_search', 'cat_filter', 'catalog-tbody');</script>{% endblock %}

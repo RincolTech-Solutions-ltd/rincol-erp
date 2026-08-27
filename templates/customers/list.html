@@ -10,16 +10,12 @@
   </a>
 </div>
 
-<form method="get" class="row g-2 mb-3">
+<div class="row g-2 mb-3">
   <div class="col-auto">
-    <input type="text" name="q" id="q_search" class="form-control form-control-sm"
-           placeholder="Search name / phone" value="{{ search }}" autocomplete="off">
+    <input type="text" id="q_search" class="form-control form-control-sm"
+           placeholder="Search name / phone" autocomplete="off">
   </div>
-  <div class="col-auto">
-    <button type="submit" class="btn btn-sm btn-outline-secondary">Filter</button>
-    <a href="{{ url_for('customers_list') }}" class="btn btn-sm btn-outline-secondary ms-1">Clear</a>
-  </div>
-</form>
+</div>
 
 <div class="card">
   <div class="card-body p-0">

@@ -99,6 +99,8 @@ def dashboard():
         "quotations":  query_one("SELECT COUNT(*) AS n FROM quotations")["n"],
         "draft":       query_one("SELECT COUNT(*) AS n FROM quotations WHERE status='Draft'")["n"],
         "pending":     query_one("SELECT COUNT(*) AS n FROM quotations WHERE status='Pending'")["n"],
+        "draft_total":   query_one("SELECT COALESCE(SUM(total_amount),0) AS n FROM quotations WHERE status='Draft'")["n"],
+        "pending_total": query_one("SELECT COALESCE(SUM(total_amount),0) AS n FROM quotations WHERE status='Pending'")["n"],
         "outstanding": query_one(
             "SELECT COALESCE(SUM(q.total_amount - COALESCE(r.paid,0)),0) AS n "
             "FROM quotations q "
@@ -150,31 +152,15 @@ def dashboard():
 @app.route("/quotations")
 @login_required
 def quotations_list():
-    status  = request.args.get("status", "")
-    payment = request.args.get("payment", "")
-    search  = request.args.get("q", "")
-    sql     = ("SELECT q.id, q.quotation_no, q.customer_name, q.customer_phone, "
-               "q.total_amount, q.status, q.date, COALESCE(r.paid, 0) AS paid "
-               "FROM quotations q "
-               "LEFT JOIN (SELECT quotation_id, SUM(amount_paid) AS paid FROM receipts "
-               "           WHERE quotation_id IS NOT NULL GROUP BY quotation_id) r "
-               "ON r.quotation_id = q.id WHERE 1=1")
-    params  = []
-    if status:
-        sql += " AND q.status=%s"; params.append(status)
-    if search:
-        sql += " AND (q.customer_name ILIKE %s OR q.quotation_no ILIKE %s)"
-        params += [f"%{search}%", f"%{search}%"]
-    if payment == "unpaid":
-        sql += " AND COALESCE(r.paid, 0) <= 0 AND q.status != 'Cancelled'"
-    elif payment == "partial":
-        sql += " AND COALESCE(r.paid, 0) > 0 AND COALESCE(r.paid, 0) < q.total_amount AND q.status != 'Cancelled'"
-    elif payment == "paid":
-        sql += " AND COALESCE(r.paid, 0) >= q.total_amount AND q.status != 'Cancelled'"
-    sql += " ORDER BY q.created_at DESC"
-    rows = query(sql, params)
-    return render_template("quotation/list.html", quotations=rows,
-                           status=status, payment=payment, search=search)
+    rows = query(
+        "SELECT q.id, q.quotation_no, q.customer_name, q.customer_phone, "
+        "q.total_amount, q.status, q.date, COALESCE(r.paid, 0) AS paid "
+        "FROM quotations q "
+        "LEFT JOIN (SELECT quotation_id, SUM(amount_paid) AS paid FROM receipts "
+        "           WHERE quotation_id IS NOT NULL GROUP BY quotation_id) r "
+        "ON r.quotation_id = q.id "
+        "ORDER BY q.created_at DESC")
+    return render_template("quotation/list.html", quotations=rows)
 
 
 @app.route("/quotations/new", methods=["GET", "POST"])
@@ -687,14 +673,11 @@ def receipts_pdf(rid):
 @app.route("/maintenance")
 @login_required
 def maintenance_list():
-    status = request.args.get("status","")
-    sql    = "SELECT m.*, q.quotation_no FROM maintenance_records m LEFT JOIN quotations q ON q.id=m.linked_quotation_id WHERE 1=1"
-    params = []
-    if status:
-        sql += " AND m.status=%s"; params.append(status)
-    sql += " ORDER BY m.created_at DESC"
-    rows = query(sql, params)
-    return render_template("maintenance/list.html", records=rows, status=status)
+    rows = query(
+        "SELECT m.*, q.quotation_no FROM maintenance_records m "
+        "LEFT JOIN quotations q ON q.id=m.linked_quotation_id "
+        "ORDER BY m.created_at DESC")
+    return render_template("maintenance/list.html", records=rows)
 
 
 @app.route("/maintenance/new", methods=["GET","POST"])
@@ -797,19 +780,9 @@ def maintenance_edit(mid):
 @app.route("/catalog")
 @login_required
 def catalog_list():
-    cat    = request.args.get("cat","")
-    search = request.args.get("q","")
-    sql    = "SELECT * FROM catalog_items WHERE 1=1"
-    params = []
-    if cat:
-        sql += " AND category=%s"; params.append(cat)
-    if search:
-        sql += " AND (name ILIKE %s OR spec ILIKE %s)"
-        params += [f"%{search}%", f"%{search}%"]
-    sql  += " ORDER BY category, name"
-    rows  = query(sql, params)
-    cats  = [r["category"] for r in query("SELECT DISTINCT category FROM catalog_items ORDER BY category")]
-    return render_template("catalog/list.html", items=rows, categories=cats, cat=cat, search=search)
+    rows = query("SELECT * FROM catalog_items ORDER BY category, name")
+    cats = [r["category"] for r in query("SELECT DISTINCT category FROM catalog_items ORDER BY category")]
+    return render_template("catalog/list.html", items=rows, categories=cats)
 
 
 @app.route("/catalog/new", methods=["GET","POST"])
@@ -2601,7 +2574,6 @@ def _next_customer_no() -> str:
 @app.route("/customers")
 @login_required
 def customers_list():
-    search = request.args.get("q", "").strip()
     sql = """
         SELECT c.id, c.customer_no, c.name, c.phone, c.email,
                COUNT(q.id) AS job_count,
@@ -2614,14 +2586,10 @@ def customers_list():
         LEFT JOIN (
             SELECT quotation_id, SUM(amount_paid) AS paid FROM receipts GROUP BY quotation_id
         ) r ON r.quotation_id = q.id
+        GROUP BY c.id ORDER BY c.name
     """
-    params = []
-    if search:
-        sql += " WHERE c.name ILIKE %s OR c.phone ILIKE %s"
-        params += [f"%{search}%", f"%{search}%"]
-    sql += " GROUP BY c.id ORDER BY c.name"
-    customers = [dict(r) for r in query(sql, params or None)]
-    return render_template("customers/list.html", customers=customers, search=search)
+    customers = [dict(r) for r in query(sql)]
+    return render_template("customers/list.html", customers=customers)
 
 
 @app.route("/customers/new", methods=["GET", "POST"])

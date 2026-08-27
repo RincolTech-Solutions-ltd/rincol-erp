@@ -8,16 +8,14 @@
   <a href="{{ url_for('maintenance_new') }}" class="btn btn-primary btn-sm"><i class="bi bi-plus"></i> New Maintenance</a>
 </div>
 
-<form method="get" class="d-flex gap-2 mb-3">
-  <select name="status" class="form-select form-select-sm" style="width:auto">
+<div class="d-flex gap-2 mb-3">
+  <select id="status_filter" class="form-select form-select-sm" style="width:auto">
     <option value="">All statuses</option>
     {% for s in ['Scheduled','Open','In Progress','Pending Parts','Resolved','Cancelled'] %}
-    <option value="{{ s }}" {% if status==s %}selected{% endif %}>{{ s }}</option>
+    <option value="{{ s }}">{{ s }}</option>
     {% endfor %}
   </select>
-  <button type="submit" class="btn btn-sm btn-outline-secondary">Filter</button>
-  <a href="{{ url_for('maintenance_list') }}" class="btn btn-sm btn-outline-secondary">Clear</a>
-</form>
+</div>
 
 <div class="card">
   <div class="card-body p-0">
@@ -26,7 +24,7 @@
         <thead>
           <tr><th>Client</th><th>Phone</th><th>Type</th><th>Status</th><th>Executor</th><th class="text-end">Labour</th><th>Sched / Visit Date</th><th></th></tr>
         </thead>
-        <tbody>
+        <tbody id="maintenance-tbody">
           {% for r in records %}
           <tr>
             <td>
@@ -62,3 +60,4 @@
   </div>
 </div>
 {% endblock %}
+{% block scripts %}<script>liveFilter(null, 'status_filter', 'maintenance-tbody');</script>{% endblock %}

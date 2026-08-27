@@ -448,12 +448,24 @@ function initColResize(tableId) {
 // Receipt auto-fill and balance logic is handled inline in templates/receipt/form.html
 
 // ── Live search / filter helpers ─────────────────────────────────────────────
-// liveSearch: text filter only.  liveFilter: text + select dropdown combined.
-function _applyFilter(tbody, q, st) {
+// liveSearch: text filter only.  liveFilter: text + one-or-more select dropdowns,
+// all combined with AND — every non-empty filter must match for a row to show.
+// No page ever has pagination, so filtering the already-rendered rows in place
+// (no reload, no submit button) is always correct.
+function _matchesFilterWord(text, f) {
+  // Word-boundary match, not substring — "paid" must not match inside
+  // "unpaid". Free-text search (q) stays substring-based; this is only for
+  // dropdown values, which are known whole words/phrases.
+  const escaped = f.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp('\\b' + escaped + '\\b').test(text);
+}
+function _applyFilter(tbody, q, filters) {
   Array.from(tbody.rows).forEach(function (row) {
     if (row.cells.length <= 1) return;
     const text = row.textContent.toLowerCase();
-    row.style.display = ((!q || text.includes(q)) && (!st || text.includes(st))) ? '' : 'none';
+    const matchesQ   = !q || text.includes(q);
+    const matchesAll = filters.every(f => !f || _matchesFilterWord(text, f));
+    row.style.display = (matchesQ && matchesAll) ? '' : 'none';
   });
 }
 function liveSearch(inputId, tbodyId) {
@@ -461,19 +473,21 @@ function liveSearch(inputId, tbodyId) {
   const tbody = document.getElementById(tbodyId);
   if (!inp || !tbody) return;
   inp.addEventListener('input', function () {
-    _applyFilter(tbody, this.value.toLowerCase().trim(), '');
+    _applyFilter(tbody, this.value.toLowerCase().trim(), []);
   });
 }
-function liveFilter(inputId, selectId, tbodyId) {
-  const inp   = document.getElementById(inputId);
-  const sel   = document.getElementById(selectId);
+// selectIds: a single element id, or an array of ids (one page can combine
+// several dropdowns — e.g. status + payment — with the same text search).
+function liveFilter(inputId, selectIds, tbodyId) {
+  const inp   = inputId ? document.getElementById(inputId) : null;
+  const ids   = Array.isArray(selectIds) ? selectIds : [selectIds];
+  const sels  = ids.filter(Boolean).map(id => document.getElementById(id)).filter(Boolean);
   const tbody = document.getElementById(tbodyId);
   if (!tbody) return;
   function apply() {
-    _applyFilter(tbody,
-      inp ? inp.value.toLowerCase().trim() : '',
-      sel ? sel.value.toLowerCase().trim() : '');
+    const filters = sels.map(s => s.value.toLowerCase().trim());
+    _applyFilter(tbody, inp ? inp.value.toLowerCase().trim() : '', filters);
   }
-  inp?.addEventListener('input',  apply);
-  sel?.addEventListener('change', apply);
+  inp?.addEventListener('input', apply);
+  sels.forEach(s => s.addEventListener('change', apply));
 }
