@@ -11,7 +11,7 @@
 </div>
 
 {# Filters #}
-<div class="row g-2 mb-3">
+<div class="row g-2 mb-3 align-items-center">
   <div class="col-auto">
     <input type="text" id="q_search" class="form-control form-control-sm" placeholder="Search customer / no." autocomplete="off">
   </div>
@@ -30,6 +30,10 @@
       <option value="partial">Partial</option>
       <option value="paid">Paid</option>
     </select>
+  </div>
+  <div class="col-auto ms-auto">
+    <span class="text-muted small">Total:</span>
+    <span id="filter_summary" class="fw-semibold text-blue"></span>
   </div>
 </div>
 
@@ -83,4 +87,4 @@
   </div>
 </div>
 {% endblock %}
-{% block scripts %}<script>liveFilter('q_search', ['status_filter','payment_filter'], 'quotations-tbody');</script>{% endblock %}
+{% block scripts %}<script>liveFilter('q_search', ['status_filter','payment_filter'], 'quotations-tbody', {id: 'filter_summary', amountSelector: '.money'});</script>{% endblock %}
