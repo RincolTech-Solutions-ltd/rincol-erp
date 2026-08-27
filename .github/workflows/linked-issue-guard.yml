@@ -1,0 +1,54 @@
+name: linked-issue-guard
+
+# Fails any PR whose description does not link an issue with a closing keyword
+# (Closes / Fixes / Resolves #N, or the cross-repo owner/repo#N form). This is
+# what makes GitHub's native "Linked pull requests" column populate, so every
+# same-repo code or architecture PR traces back to its Task or Chore.
+#
+# Document-only PRs are exempt (PROCESS.md escape hatch: docs/, references/,
+# office/). Any PR that also touches code or architecture still needs the link.
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  linked-issue:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Require a closing issue reference (documents exempt)
+        env:
+          BODY: ${{ github.event.pull_request.body }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          files=$(git diff --name-only --diff-filter=d "$BASE" "$HEAD")
+          # A file counts as a document if it sits in a document folder or is a
+          # binary office file anywhere. Anything else is code or architecture.
+          doc_re='^(docs|references|office)/|\.(docx|pdf|pptx|xlsx|png|jpg|jpeg)$'
+          non_doc=0
+          while IFS= read -r f; do
+            [ -z "$f" ] && continue
+            if ! printf '%s' "$f" | grep -iqE "$doc_re"; then
+              non_doc=1
+              echo "code or architecture file changed: $f"
+            fi
+          done <<< "$files"
+          if [ -n "$files" ] && [ "$non_doc" -eq 0 ]; then
+            echo "Document-only PR. Linked-issue requirement waived."
+            exit 0
+          fi
+          # Same-repo: "Closes #123"  |  Cross-repo: "Closes owner/repo#123"
+          pattern='(clos|fix|resolv)[a-z]*[[:space:]]+([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)?#[0-9]+'
+          if printf '%s' "$BODY" | grep -iqE "$pattern"; then
+            echo "Linked issue found. Guard passes."
+          else
+            echo "::error::This PR must link its issue. Add 'Closes #N' (or Fixes/Resolves #N) to the description. Cross-repo: 'Closes owner/repo#N'. See PROCESS.md."
+            exit 1
+          fi
