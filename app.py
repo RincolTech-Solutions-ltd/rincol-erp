@@ -874,7 +874,8 @@ def catalog_edit(item_id=None):
         flash("Item saved.", "success")
         return redirect(url_for("catalog_list"))
 
-    categories = ["Battery","Inverter","Solar Panel","Charge Controller","Cable","Accessory","Service"]
+    categories = ["Battery","Inverter","Solar Panel","Charge Controller","Cable","Accessory","Service",
+                  "Street Light","Solar Water Heater"]
     suppliers  = query("SELECT id, name FROM service_providers ORDER BY name")
     # Parse spec_data so the template can access it as a dict
     if item and item.get("spec_data"):
