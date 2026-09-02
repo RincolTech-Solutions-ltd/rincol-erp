@@ -8,6 +8,7 @@ from datetime import date, datetime
 from functools import wraps
 from flask import (Flask, render_template, request, redirect, url_for,
                    session, flash, send_file, jsonify, abort)
+from markupsafe import escape
 from dotenv import load_dotenv
 from supabase import create_client, Client
 
@@ -38,7 +39,8 @@ from utils.pdf import build_quotation_pdf, build_receipt_pdf, build_statement_pd
 from utils.notify import (notify_maintenance, notify_quotation,
                            notify_quotation_status, notify_receipt,
                            notify_task, notify_settlement, notify_balancing_job,
-                           send_customer_statement)
+                           send_customer_statement, send_quotation_to_customer)
+from utils.whatsapp import send_quotation_whatsapp
 from utils.tg_bot import handle_update as _tg_handle_update
 
 
@@ -293,32 +295,78 @@ def _save_quotation(qid):
     flash("Quotation saved.", "success")
     saved_q = query_one("SELECT * FROM quotations WHERE id=%s", (qid,))
     if saved_q:
-        # Build PDF whenever status is Pending or Approved — customer will receive it
-        pdf_bytes = None
-        customer_email = (saved_q.get("customer_email") or "").strip()
-        qno_log = saved_q.get("quotation_no", qid)
-        if saved_q.get("status") in ("Pending", "Approved") and customer_email:
-            print(f"[QUOT] {qno_log} status={saved_q.get('status')} — building PDF for {customer_email}", flush=True)
+        # Build PDF + dispatch to the customer whenever status is Pending or
+        # Approved and there's an email or phone to reach them on.
+        status  = saved_q.get("status")
+        has_contact = bool((saved_q.get("customer_email") or "").strip() or
+                            (saved_q.get("customer_phone") or "").strip())
+        if status in ("Pending", "Approved") and has_contact:
+            pdf_bytes = None
             try:
                 saved_items = query("SELECT * FROM quotation_items WHERE quotation_id=%s ORDER BY line_no", (qid,))
                 pdf_bytes   = build_quotation_pdf(dict(saved_q), [dict(i) for i in saved_items],
                                                   sig_bytes=_load_default_sig())
-                print(f"[QUOT] PDF built OK ({len(pdf_bytes)} bytes)", flush=True)
             except Exception as _pdf_err:
                 print(f"[QUOT] PDF build FAILED: {_pdf_err}", flush=True)
                 pdf_bytes = None
-            customer_name = (saved_q.get("customer_name") or "").strip()
-            if pdf_bytes:
-                flash(f"📎 Quotation PDF sent to {customer_name} &lt;{customer_email}&gt;.", "info")
-            else:
-                flash(f"⚠️ PDF generation failed — quotation was NOT emailed to {customer_name} ({customer_email}).", "warning")
-        elif saved_q.get("status") in ("Pending", "Approved") and not customer_email:
-            print(f"[QUOT] {qno_log} status={saved_q.get('status')} — no customer email, skipping PDF", flush=True)
-        notify_quotation(dict(saved_q), action="created" if _is_new else "updated",
-                         pdf_bytes=pdf_bytes)
-        if saved_q.get("status") == "Approved":
+            msg, category = _dispatch_quotation_to_customer(dict(saved_q), pdf_bytes, status)
+            flash(msg, category)
+        notify_quotation(dict(saved_q), action="created" if _is_new else "updated")
+        if status == "Approved":
             _maybe_create_approval_task(qid, dict(saved_q))
     return redirect(url_for("quotations_view", qid=qid))
+
+
+# JUSTIFICATION-A3: new shared helper, not a wrapper — replaces near-duplicate
+# buggy flash logic in two routes (create/edit + status-change) that both
+# lied about send success; this is the minimal single place to fix it once.
+def _dispatch_quotation_to_customer(q_rec: dict, pdf_bytes: bytes, status: str):
+    """Send the quotation PDF to the customer over email and/or WhatsApp,
+    SYNCHRONOUSLY, and return (html_message, flash_category) describing what
+    actually happened — never a blanket 'sent' regardless of the real outcome.
+    """
+    # qno/client/customer_email/wa_msg all originate from user-editable form
+    # fields (or bridge error text echoing them back) and this flash is
+    # rendered with |safe in base.html — escape before interpolating.
+    qno            = escape(q_rec.get("quotation_no", "—"))
+    client         = escape((q_rec.get("customer_name") or "").strip())
+    amount         = q_rec.get("total_amount") or 0
+    customer_email = (q_rec.get("customer_email") or "").strip()
+    customer_email_safe = escape(customer_email)
+    customer_phone = (q_rec.get("customer_phone") or "").strip()
+
+    if not pdf_bytes:
+        return f"⚠️ PDF generation failed — quotation was NOT sent to {client}.", "warning"
+
+    email_ok = False
+    if customer_email:
+        email_ok = send_quotation_to_customer(str(qno), str(client), amount, customer_email, pdf_bytes, status)
+
+    wa_ok, wa_msg = False, ""
+    if customer_phone:
+        caption_lines = [
+            f"*Rincol Tech Solutions Ltd* — Quotation {qno}",
+            f"Customer: {client}",
+            f"Amount: UGX {amount:,.0f}",
+            f"Status: {status}",
+        ]
+        if email_ok:
+            caption_lines.append(f"\nThe same has been sent to your email: {customer_email}")
+        wa_ok, wa_msg = send_quotation_whatsapp(customer_phone, str(qno), pdf_bytes, "\n".join(caption_lines))
+    wa_msg_safe = escape(wa_msg)
+
+    parts = []
+    if customer_email:
+        parts.append(f"emailed to {customer_email_safe}" if email_ok else f"email to {customer_email_safe} FAILED")
+    if customer_phone:
+        parts.append("sent on WhatsApp" if wa_ok else f"WhatsApp send FAILED ({wa_msg_safe})")
+    if not parts:
+        return f"📎 Quotation PDF ready for {client} — no email or phone on file, nothing sent automatically.", "warning"
+
+    all_ok = (not customer_email or email_ok) and (not customer_phone or wa_ok)
+    icon = "📎" if (email_ok or wa_ok) else "⚠️"
+    return (f"{icon} Quotation {qno} for {client}: " + "; ".join(parts) + ".",
+            "info" if all_ok else "warning")
 
 
 def _maybe_create_approval_task(qid: str, q_rec: dict):
@@ -422,22 +470,21 @@ def quotations_status(qid):
         flash(f"Status updated to {status}.", "success")
     q_rec = query_one("SELECT * FROM quotations WHERE id=%s", (qid,))
     if q_rec:
-        # Build PDF when moving to Pending or Approved — customer gets it
-        pdf_bytes = None
-        customer_email = (q_rec.get("customer_email") or "").strip()
-        if status in ("Pending", "Approved") and customer_email:
+        # Build PDF + dispatch when moving to Pending or Approved — customer
+        # gets it over whichever of email/WhatsApp they have on file.
+        has_contact = bool((q_rec.get("customer_email") or "").strip() or
+                            (q_rec.get("customer_phone") or "").strip())
+        if status in ("Pending", "Approved") and has_contact:
+            pdf_bytes = None
             try:
                 q_items   = query("SELECT * FROM quotation_items WHERE quotation_id=%s ORDER BY line_no", (qid,))
                 pdf_bytes = build_quotation_pdf(dict(q_rec), [dict(i) for i in q_items],
                                                 sig_bytes=_load_default_sig())
             except Exception:
                 pdf_bytes = None
-            customer_name = (q_rec.get("customer_name") or "").strip()
-            if pdf_bytes:
-                flash(f"📎 Quotation PDF sent to {customer_name} &lt;{customer_email}&gt;.", "info")
-            else:
-                flash(f"⚠️ PDF generation failed — quotation was NOT emailed to {customer_name} ({customer_email}).", "warning")
-        notify_quotation_status(dict(q_rec), new_status=status, pdf_bytes=pdf_bytes)
+            msg, category = _dispatch_quotation_to_customer(dict(q_rec), pdf_bytes, status)
+            flash(msg, category)
+        notify_quotation_status(dict(q_rec), new_status=status)
         if status == "Approved":
             _maybe_create_approval_task(qid, dict(q_rec))
     return redirect(url_for("quotations_view", qid=qid))
