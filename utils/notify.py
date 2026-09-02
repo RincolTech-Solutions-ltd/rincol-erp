@@ -1,14 +1,19 @@
-"""Notification helpers — Telegram + Resend."""
+"""Notification helpers — Telegram + Email (Gmail SMTP)."""
 import os
 import base64
+import smtplib
 import threading
+from email.mime.application import MIMEApplication
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 
 import requests
 
 # ── Config ────────────────────────────────────────────────────────────────────
 _TG_TOKEN    = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 _TG_CHAT     = os.environ.get("TELEGRAM_CHAT_ID", "")
-_SG_KEY      = os.environ.get("SENDGRID_API_KEY", "")
+_GMAIL_USER  = os.environ.get("GMAIL_SMTP_USER", "")
+_GMAIL_PASS  = os.environ.get("GMAIL_SMTP_APP_PASSWORD", "")
 _FROM_EMAIL  = os.environ.get("EMAIL_FROM", "rincoltech@gmail.com")
 _NOTIFY_TO   = [e.strip() for e in os.environ.get("NOTIFY_EMAILS", "").split(",") if e.strip()]
 _APP_URL     = os.environ.get("APP_BASE_URL", "https://rincol-erp.onrender.com")
@@ -57,42 +62,37 @@ def _dm(person: str, text: str, keyboard=None):
         pass
 
 
-def _sg_send(to: list, subject: str, html_body: str, attachments: list = None):
-    """Send via SendGrid Web API. attachments = [{"filename": "x.pdf", "content": base64str}]"""
-    if not _SG_KEY:
-        print(f"[EMAIL] SKIP — SENDGRID_API_KEY not set. Would have sent to {to}: {subject}", flush=True)
-        return
-    body = {
-        "personalizations": [{"to": [{"email": e} for e in to]}],
-        "from": {"email": _FROM_EMAIL, "name": "Rincol Tech Solutions"},
-        "subject": subject,
-        "content": [{"type": "text/html", "value": html_body}],
-    }
-    if attachments:
-        body["attachments"] = [
-            {"content": a["content"], "filename": a["filename"], "type": "application/pdf"}
-            for a in attachments
-        ]
+def _smtp_send(to: list, subject: str, html_body: str, attachments: list = None) -> bool:
+    """Send via Gmail SMTP. attachments = [{"filename": "x.pdf", "content": base64str}].
+    Returns True only on a confirmed successful send."""
+    if not _GMAIL_USER or not _GMAIL_PASS:
+        print(f"[EMAIL] SKIP — GMAIL_SMTP_USER/APP_PASSWORD not set. Would have sent to {to}: {subject}", flush=True)
+        return False
+    msg = MIMEMultipart()
+    msg["From"]    = f"Rincol Tech Solutions <{_GMAIL_USER}>"
+    msg["To"]      = ", ".join(to)
+    msg["Subject"] = subject
+    msg.attach(MIMEText(html_body, "html"))
+    for a in (attachments or []):
+        part = MIMEApplication(base64.b64decode(a["content"]), _subtype="pdf")
+        part.add_header("Content-Disposition", "attachment", filename=a["filename"])
+        msg.attach(part)
     try:
         print(f"[EMAIL] Sending to {to}: {subject}", flush=True)
-        r = requests.post(
-            "https://api.sendgrid.com/v3/mail/send",
-            headers={"Authorization": f"Bearer {_SG_KEY}", "Content-Type": "application/json"},
-            json=body,
-            timeout=15,
-        )
-        if r.status_code == 202:
-            print(f"[EMAIL] OK 202 — delivered to SendGrid for {to}", flush=True)
-        else:
-            print(f"[EMAIL] ERROR {r.status_code} — {r.text[:300]}", flush=True)
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=15) as smtp:
+            smtp.login(_GMAIL_USER, _GMAIL_PASS)
+            smtp.sendmail(_GMAIL_USER, to, msg.as_string())
+        print(f"[EMAIL] OK — delivered via Gmail SMTP for {to}", flush=True)
+        return True
     except Exception as e:
         print(f"[EMAIL] EXCEPTION sending to {to}: {e}", flush=True)
+        return False
 
 
 def _send_email(subject: str, html_body: str):
-    if not _SG_KEY or not _NOTIFY_TO:
+    if not _GMAIL_USER or not _NOTIFY_TO:
         return
-    _sg_send(_NOTIFY_TO, subject, html_body)
+    _smtp_send(_NOTIFY_TO, subject, html_body)
 
 
 def _fire(tg_text: str, subject: str, html: str):
@@ -239,11 +239,11 @@ def notify_maintenance(record: dict, action: str = "updated"):
 
 # ── Quotations ────────────────────────────────────────────────────────────────
 
-def notify_quotation(record: dict, action: str = "created", pdf_bytes: bytes = None):
+def notify_quotation(record: dict, action: str = "created"):
     """action: 'created' | 'updated'.
-    Draft  → group Telegram + team email + DM Hillary & Dennis. No customer email.
-    Pending/Approved → group + team + DMs + customer email with PDF (if pdf_bytes + customer_email).
-    Other statuses → group + team + DMs. No customer email.
+    Always internal-only: group Telegram + team email + DM Hillary & Dennis.
+    Never emails the customer — the calling route does that synchronously via
+    send_quotation_to_customer() so the flash message reflects the real result.
     """
     q              = record
     qid            = q.get("id", "")
@@ -252,7 +252,6 @@ def notify_quotation(record: dict, action: str = "created", pdf_bytes: bytes = N
     phone          = q.get("customer_phone") or "—"
     status         = q.get("status", "—")
     amount         = q.get("total_amount") or 0
-    customer_email = (q.get("customer_email") or "").strip()
     emoji          = _QUOT_EMOJI.get(status, "📋")
     link           = f"{_APP_URL}/quotations/{qid}"
 
@@ -274,19 +273,21 @@ def notify_quotation(record: dict, action: str = "created", pdf_bytes: bytes = N
                     _email_wrap(emoji, f"Quotation {action.title()}", rows, link, "View Quotation"))
         _dm("hillary", tg, keyboard=kbd)
         _dm("dennis", tg, keyboard=kbd)
-        # Customer email only when quotation is being shared (Pending) or confirmed (Approved)
-        if pdf_bytes and customer_email and status in ("Pending", "Approved"):
-            _send_quotation_to_customer(qno, client, amount, customer_email, pdf_bytes, status)
+        # NOTE: the customer-facing email is sent synchronously by the route
+        # itself (app.py), not here — that's what lets the flash message
+        # reflect the ACTUAL send result instead of firing this in the
+        # background and guessing. Do not re-add a customer send in this
+        # thread; it would double-send.
     threading.Thread(target=_go, daemon=True).start()
 
 
-def _send_quotation_to_customer(qno: str, client: str, amount: float,
-                                 customer_email: str, pdf_bytes: bytes,
-                                 status: str = "Pending"):
+def send_quotation_to_customer(qno: str, client: str, amount: float,
+                                customer_email: str, pdf_bytes: bytes,
+                                status: str = "Pending") -> bool:
     print(f"[QUOT-EMAIL] Preparing {qno} for {customer_email} (status={status}, pdf={len(pdf_bytes or b'')} bytes)", flush=True)
-    if not _SG_KEY:
-        print(f"[QUOT-EMAIL] SKIP — no SG key", flush=True)
-        return
+    if not _GMAIL_PASS:
+        print(f"[QUOT-EMAIL] SKIP — no Gmail SMTP password configured", flush=True)
+        return False
     if status == "Approved":
         subject    = f"Approved Quotation {qno} — Rincol Tech Solutions Ltd"
         intro_line = (f"Thank you for approving quotation <strong>{qno}</strong>. "
@@ -320,22 +321,23 @@ def _send_quotation_to_customer(qno: str, client: str, amount: float,
       </div>
     </div>"""
 
-    _sg_send([customer_email], subject, html_body,
+    return _smtp_send([customer_email], subject, html_body,
              attachments=[{"filename": f"{qno}.pdf",
                            "content": base64.b64encode(pdf_bytes).decode()}])
 
 
-def notify_quotation_status(record: dict, new_status: str, pdf_bytes: bytes = None):
+def notify_quotation_status(record: dict, new_status: str):
     """Dedicated notification for status-only changes.
-    Always fires group Telegram + team email + DMs to Hillary & Dennis.
-    Also emails customer with PDF when transitioning to Pending or Approved.
+    Always fires group Telegram + team email + DMs to Hillary & Dennis
+    (internal-only, fire-and-forget). Does NOT email the customer — the
+    calling route sends that synchronously via send_quotation_to_customer()
+    so the user-facing flash message reflects the real outcome.
     """
     q              = record
     qid            = q.get("id", "")
     qno            = q.get("quotation_no", "—")
     client         = q.get("customer_name", "—")
     amount         = q.get("total_amount") or 0
-    customer_email = (q.get("customer_email") or "").strip()
     emoji          = _QUOT_EMOJI.get(new_status, "📋")
     link           = f"{_APP_URL}/quotations/{qid}"
 
@@ -354,8 +356,8 @@ def notify_quotation_status(record: dict, new_status: str, pdf_bytes: bytes = No
                     _email_wrap(emoji, f"Quotation → {new_status}", rows, link, "View Quotation"))
         _dm("hillary", tg, keyboard=kbd)
         _dm("dennis", tg, keyboard=kbd)
-        if pdf_bytes and customer_email and new_status in ("Pending", "Approved"):
-            _send_quotation_to_customer(qno, client, amount, customer_email, pdf_bytes, new_status)
+        # Customer email is sent synchronously by the route (app.py) so the
+        # flash message reflects the real result — not repeated here.
     threading.Thread(target=_go, daemon=True).start()
 
 
@@ -398,7 +400,7 @@ def notify_receipt(record: dict, pdf_bytes: bytes = None):
 
 def _send_receipt_to_customer(rno: str, client: str, paid: float, balance: float,
                                method: str, customer_email: str, pdf_bytes: bytes):
-    if not _SG_KEY:
+    if not _GMAIL_PASS:
         return
     bal_note = "Fully settled — thank you!" if balance <= 0 else f"UGX {balance:,.0f} outstanding"
 
@@ -427,7 +429,7 @@ def _send_receipt_to_customer(rno: str, client: str, paid: float, balance: float
       </div>
     </div>"""
 
-    _sg_send([customer_email], f"Payment Receipt {rno} — Rincol Tech Solutions Ltd", html_body,
+    _smtp_send([customer_email], f"Payment Receipt {rno} — Rincol Tech Solutions Ltd", html_body,
              attachments=[{"filename": f"{rno}.pdf",
                            "content": base64.b64encode(pdf_bytes).decode()}])
 
@@ -482,7 +484,7 @@ def notify_task(record: dict, action: str = "created"):
 
 def send_customer_statement(customer: dict, stats: dict, pdf_bytes: bytes, statement_url: str):
     """Email a customer their account statement PDF + link to the live statement page."""
-    if not _SG_KEY or not customer.get("email"):
+    if not _GMAIL_PASS or not customer.get("email"):
         return
     name    = customer.get("name", "Valued Customer")
     cust_no = customer.get("customer_no", "")
@@ -524,7 +526,7 @@ def send_customer_statement(customer: dict, stats: dict, pdf_bytes: bytes, state
       </div>
     </div>"""
 
-    _sg_send([customer["email"]],
+    _smtp_send([customer["email"]],
              f"Account Statement — {name} ({cust_no}) — Rincol Tech Solutions",
              html_body,
              attachments=[{"filename": f"Statement_{cust_no}.pdf",
