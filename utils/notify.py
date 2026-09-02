@@ -78,7 +78,10 @@ def _smtp_send(to: list, subject: str, html_body: str, attachments: list = None)
         msg.attach(part)
     try:
         print(f"[EMAIL] Sending to {to}: {subject}", flush=True)
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=15) as smtp:
+        # Port 465 (implicit TLS) is blocked outbound on the Hetzner box;
+        # 587 (STARTTLS) is open. Confirmed via direct port test 2026-09-02.
+        with smtplib.SMTP("smtp.gmail.com", 587, timeout=15) as smtp:
+            smtp.starttls()
             smtp.login(_GMAIL_USER, _GMAIL_PASS)
             # sendmail returns a dict of {recipient: (code, msg)} for any
             # recipient that was REFUSED but didn't raise (raises only if
