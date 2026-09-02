@@ -589,9 +589,11 @@ def _cb_quot_setstatus(chat_id, qid, status, msg_id):
     from utils.notify import notify_quotation_status
     execute("UPDATE quotations SET status=%s, updated_at=NOW() WHERE id=%s", (status, qid))
     q = query_one("SELECT * FROM quotations WHERE id=%s", (qid,))
-    edit_msg(chat_id, msg_id,
-             _quot_text(q) if q else f"Quotation → {status}",
-             quot_keyboard(qid))
+    text = _quot_text(q) if q else f"Quotation → {status}"
+    has_contact = q and ((q.get("customer_email") or "").strip() or (q.get("customer_phone") or "").strip())
+    if q and status in ("Pending", "Approved") and has_contact:
+        text += "\n\n⚠️ Customer NOT notified from here — resend from the web app to email/WhatsApp them the PDF."
+    edit_msg(chat_id, msg_id, text, quot_keyboard(qid))
     if q:
         notify_quotation_status(dict(q), status)
 

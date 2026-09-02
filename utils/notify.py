@@ -14,7 +14,6 @@ _TG_TOKEN    = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 _TG_CHAT     = os.environ.get("TELEGRAM_CHAT_ID", "")
 _GMAIL_USER  = os.environ.get("GMAIL_SMTP_USER", "")
 _GMAIL_PASS  = os.environ.get("GMAIL_SMTP_APP_PASSWORD", "")
-_FROM_EMAIL  = os.environ.get("EMAIL_FROM", "rincoltech@gmail.com")
 _NOTIFY_TO   = [e.strip() for e in os.environ.get("NOTIFY_EMAILS", "").split(",") if e.strip()]
 _APP_URL     = os.environ.get("APP_BASE_URL", "https://rincol-erp.onrender.com")
 
@@ -81,7 +80,14 @@ def _smtp_send(to: list, subject: str, html_body: str, attachments: list = None)
         print(f"[EMAIL] Sending to {to}: {subject}", flush=True)
         with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=15) as smtp:
             smtp.login(_GMAIL_USER, _GMAIL_PASS)
-            smtp.sendmail(_GMAIL_USER, to, msg.as_string())
+            # sendmail returns a dict of {recipient: (code, msg)} for any
+            # recipient that was REFUSED but didn't raise (raises only if
+            # ALL recipients are refused) — a non-empty dict means a partial
+            # failure that would otherwise look identical to full success.
+            refused = smtp.sendmail(_GMAIL_USER, to, msg.as_string())
+            if refused:
+                print(f"[EMAIL] PARTIAL FAILURE — refused: {refused}", flush=True)
+                return False
         print(f"[EMAIL] OK — delivered via Gmail SMTP for {to}", flush=True)
         return True
     except Exception as e:

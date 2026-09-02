@@ -23,6 +23,8 @@ def _normalize_ug_phone(phone: str):
     digits = re.sub(r"\D", "", phone)
     if digits.startswith("0") and len(digits) == 10:
         return "256" + digits[1:]
+    if digits.startswith("2560") and len(digits) == 13:
+        return "256" + digits[4:]
     if digits.startswith("256") and len(digits) == 12:
         return digits
     if len(digits) == 9:
@@ -37,8 +39,13 @@ def send_quotation_whatsapp(phone: str, quotation_no: str, pdf_bytes: bytes, cap
     if not number:
         return False, f"no usable WhatsApp number from '{phone}'"
 
+    # quotation_no reaches here from a user-editable form field — sanitize
+    # before using it as a filename so it can't escape the temp dir or
+    # collide with an unintended path (the bridge, running as root, reads
+    # whatever path we hand it).
+    safe_no = re.sub(r"[^A-Za-z0-9._-]", "_", quotation_no) or "quotation"
     tmpdir = tempfile.mkdtemp(prefix="rincol-wa-")
-    path = os.path.join(tmpdir, f"{quotation_no}.pdf")
+    path = os.path.join(tmpdir, f"{safe_no}.pdf")
     try:
         with open(path, "wb") as f:
             f.write(pdf_bytes)
@@ -46,12 +53,15 @@ def send_quotation_whatsapp(phone: str, quotation_no: str, pdf_bytes: bytes, cap
             "recipient": number,
             "message": caption,
             "media_path": path,
-        }, timeout=30)
+        }, timeout=60)
         data = r.json()
         success = bool(data.get("success"))
         message = data.get("message", "")
         print(f"[WHATSAPP] {'OK' if success else 'FAILED'} to {number} ({quotation_no}): {message}", flush=True)
         return success, message
+    except requests.exceptions.Timeout:
+        print(f"[WHATSAPP] TIMEOUT sending to {number} ({quotation_no}) — may still deliver", flush=True)
+        return False, "bridge did not respond in time — check WhatsApp before resending, it may still arrive"
     except Exception as e:
         print(f"[WHATSAPP] EXCEPTION sending to {number} ({quotation_no}): {e}", flush=True)
         return False, str(e)
