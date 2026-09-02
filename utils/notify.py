@@ -17,11 +17,26 @@ _GMAIL_PASS  = os.environ.get("GMAIL_SMTP_APP_PASSWORD", "")
 _NOTIFY_TO   = [e.strip() for e in os.environ.get("NOTIFY_EMAILS", "").split(",") if e.strip()]
 _APP_URL     = os.environ.get("APP_BASE_URL", "https://rincol-erp.onrender.com")
 
-# Personal Telegram chat IDs — for DMs to assigned team members
+# Personal Telegram chat IDs — env vars are a fallback only; the live source
+# of truth is the telegram_users table (populated when someone sends /start
+# to the bot). Env vars go stale silently whenever the bot token/instance is
+# ever recreated, which is exactly what happened 2026-09-02.
 _PERSONAL_IDS = {
     "hillary": os.environ.get("TELEGRAM_HILLARY_ID", ""),
     "dennis":  os.environ.get("TELEGRAM_DENNIS_ID", ""),
 }
+
+
+def _lookup_chat_id(person: str) -> str:
+    person = (person or "").strip().lower()
+    try:
+        from utils.db import query_one
+        row = query_one("SELECT chat_id FROM telegram_users WHERE person_name=%s", (person,))
+        if row and row.get("chat_id"):
+            return str(row["chat_id"])
+    except Exception as e:
+        print(f"[TELEGRAM] telegram_users lookup failed for '{person}': {e}", flush=True)
+    return _PERSONAL_IDS.get(person, "")
 
 
 # ── Low-level senders ─────────────────────────────────────────────────────────
@@ -29,36 +44,42 @@ _PERSONAL_IDS = {
 def _send_telegram(text: str, keyboard=None):
     """Send to the group channel. keyboard = inline_keyboard list (optional)."""
     if not _TG_TOKEN or not _TG_CHAT:
+        print(f"[TELEGRAM] SKIP group send — TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID not set", flush=True)
         return
     payload = {"chat_id": _TG_CHAT, "text": text, "parse_mode": "Markdown"}
     if keyboard:
         payload["reply_markup"] = {"inline_keyboard": keyboard}
     try:
-        requests.post(
+        r = requests.post(
             f"https://api.telegram.org/bot{_TG_TOKEN}/sendMessage",
             json=payload,
             timeout=8,
         )
-    except Exception:
-        pass
+        if not r.ok:
+            print(f"[TELEGRAM] group send FAILED {r.status_code}: {r.text[:200]}", flush=True)
+    except Exception as e:
+        print(f"[TELEGRAM] group send EXCEPTION: {e}", flush=True)
 
 
 def _dm(person: str, text: str, keyboard=None):
     """Send a direct Telegram message to a team member by name (case-insensitive)."""
-    chat_id = _PERSONAL_IDS.get((person or "").strip().lower(), "")
+    chat_id = _lookup_chat_id(person)
     if not _TG_TOKEN or not chat_id:
+        print(f"[TELEGRAM] SKIP DM to '{person}' — no chat_id (not registered via /start, no env fallback)", flush=True)
         return
     payload = {"chat_id": chat_id, "text": text, "parse_mode": "Markdown"}
     if keyboard:
         payload["reply_markup"] = {"inline_keyboard": keyboard}
     try:
-        requests.post(
+        r = requests.post(
             f"https://api.telegram.org/bot{_TG_TOKEN}/sendMessage",
             json=payload,
             timeout=8,
         )
-    except Exception:
-        pass
+        if not r.ok:
+            print(f"[TELEGRAM] DM to '{person}' FAILED {r.status_code}: {r.text[:200]}", flush=True)
+    except Exception as e:
+        print(f"[TELEGRAM] DM to '{person}' EXCEPTION: {e}", flush=True)
 
 
 def _smtp_send(to: list, subject: str, html_body: str, attachments: list = None) -> bool:
