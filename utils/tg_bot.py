@@ -238,7 +238,12 @@ def _handle_message(msg: dict):
 
     person = get_person(chat_id)
     if not person:
-        send(chat_id, "Please register first. Send /start")
+        # Group chats aren't "registered" like a person — log the chat_id so
+        # whoever added the bot to a group can find it and set it as
+        # TELEGRAM_CHAT_ID, instead of it being a silent dead end.
+        print(f"[TELEGRAM] Message from unregistered chat_id={chat_id} (type={msg['chat'].get('type')}, title={msg['chat'].get('title')})", flush=True)
+        if msg["chat"].get("type") == "private":
+            send(chat_id, "Please register first. Send /start")
         return
 
     # ForceReply response — user replied to one of our prompts
