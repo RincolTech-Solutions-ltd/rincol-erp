@@ -123,15 +123,39 @@
                    value="{{ r.labour_fee if r else 0 }}">
           </div>
           <div class="col-4">
-            <label class="form-label">Paid By</label>
-            <select name="paid_by" class="form-select form-select-sm">
-              {% for p in ['Hillary','Dennis'] %}
-              <option value="{{ p }}" {% if (r and r.paid_by==p) or (not r and p=='Hillary') %}selected{% endif %}>{{ p }}</option>
-              {% endfor %}
-            </select>
+            <label class="form-label">External Service Cost (UGX)</label>
+            <input type="number" name="external_cost" class="form-control form-control-sm" min="0" step="any"
+                   value="{{ r.external_cost if r else 0 }}">
+          </div>
+          <div class="col-12">
+            <label class="form-label">External Service Description <span class="text-muted small">(e.g. "Lento, boost charging")</span></label>
+            <input type="text" name="external_cost_desc" class="form-control form-control-sm"
+                   value="{{ r.external_cost_desc if r else '' }}" placeholder="What was the external service, and who provided it?">
           </div>
           <div class="col-12 mt-2">
-            <label class="form-label">Cost Split <span class="text-muted small">(who bears this cost)</span></label>
+            <label class="form-label">Who Fronted The Money</label>
+            <div class="row g-2 align-items-center">
+              <div class="col-4">
+                <div class="input-group input-group-sm">
+                  <span class="input-group-text">Hillary</span>
+                  <input type="number" name="hillary_paid" class="form-control text-end" min="0" step="any"
+                         value="{{ r.hillary_paid if r else 0 }}">
+                </div>
+              </div>
+              <div class="col-1 text-center text-muted">+</div>
+              <div class="col-4">
+                <div class="input-group input-group-sm">
+                  <span class="input-group-text">Dennis</span>
+                  <input type="number" name="dennis_paid" class="form-control text-end" min="0" step="any"
+                         value="{{ r.dennis_paid if r else 0 }}">
+                </div>
+              </div>
+              <div class="col-3 text-muted small" id="maint_paid_check"></div>
+            </div>
+            <div class="form-text">Should add up to Parts + Labour &amp; Transport + External Service Cost above. Split freely if both of you covered part of it.</div>
+          </div>
+          <div class="col-12 mt-2">
+            <label class="form-label">Profit Split (%) <span class="text-muted small">(how the job's profit is divided, not who paid the cost)</span></label>
             <div class="row g-2 align-items-center">
               <div class="col-4">
                 <div class="input-group input-group-sm">
@@ -233,6 +257,22 @@
   }
   hR?.addEventListener('input', () => syncRatio(hR, dR));
   dR?.addEventListener('input', () => syncRatio(dR, hR));
+
+  // Paid-amounts check (should sum to total cost)
+  const partsIn    = document.querySelector('input[name="parts_cost"]');
+  const labourIn   = document.querySelector('input[name="labour_fee"]');
+  const externalIn = document.querySelector('input[name="external_cost"]');
+  const hPaidIn    = document.querySelector('input[name="hillary_paid"]');
+  const dPaidIn    = document.querySelector('input[name="dennis_paid"]');
+  const paidChk    = document.getElementById('maint_paid_check');
+  function syncPaidCheck() {
+    if (!paidChk) return;
+    const total = (parseFloat(partsIn?.value)||0) + (parseFloat(labourIn?.value)||0) + (parseFloat(externalIn?.value)||0);
+    const paid  = (parseFloat(hPaidIn?.value)||0) + (parseFloat(dPaidIn?.value)||0);
+    paidChk.textContent = (Math.abs(total - paid) < 1) ? '' : `⚠ total ${total.toLocaleString()} vs paid ${paid.toLocaleString()}`;
+  }
+  [partsIn, labourIn, externalIn, hPaidIn, dPaidIn].forEach(el => el?.addEventListener('input', syncPaidCheck));
+  syncPaidCheck();
 })();
 </script>
 {% endblock %}

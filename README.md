@@ -405,9 +405,13 @@ CREATE TABLE maintenance_records (
     parts_used           TEXT DEFAULT '',
     parts_cost           REAL DEFAULT 0,
     labour_fee           REAL DEFAULT 0,
-    paid_by              TEXT DEFAULT 'Hillary',  -- who fronted the money
-    h_ratio              INTEGER DEFAULT 100,  -- Hillary's share of profit (%)
-    d_ratio              INTEGER DEFAULT 0,    -- Dennis's share of profit (%)
+    external_cost        REAL DEFAULT 0,       -- e.g. an outside provider paid for a service (2026-09+)
+    external_cost_desc   TEXT DEFAULT '',
+    paid_by              TEXT DEFAULT 'Hillary',  -- DEPRECATED: not written since 2026-09; see hillary_paid/dennis_paid
+    hillary_paid         REAL DEFAULT 0,       -- how much Hillary actually fronted (can split with Dennis)
+    dennis_paid          REAL DEFAULT 0,       -- how much Dennis actually fronted
+    h_ratio              INTEGER DEFAULT 100,  -- Hillary's share of PROFIT (%), not cost
+    d_ratio              INTEGER DEFAULT 0,    -- Dennis's share of PROFIT (%), not cost
     executor_name        TEXT DEFAULT '',
     executor_payment     REAL DEFAULT 0,       -- DEPRECATED: not written by the web UI since 2026-09; labour_fee is the executor's pay
     status               TEXT DEFAULT 'Open',  -- Open | Resolved | Pending Parts
@@ -728,7 +732,10 @@ When a warranty visit happens, the job has already been balanced and closed. The
 ### Financial model
 
 ```
-total_cost  = parts_cost + labour_fee
+total_cost  = parts_cost + labour_fee + external_cost
+              (external_cost = paying an outside provider, e.g. a battery
+              boost-charge service, a separate category from your own
+              parts/labour)
 
 revenue     = SUM(receipts.amount_paid WHERE maintenance_id = this_record)
               (0 for Warranty visits — no customer payment expected)
@@ -736,10 +743,9 @@ revenue     = SUM(receipts.amount_paid WHERE maintenance_id = this_record)
 profit      = revenue - total_cost
               (negative for Warranty = a loss)
 
-paid_by     = Hillary | Dennis (who fronted the cost from their pocket)
-
-hillary_spend     = total_cost  if paid_by == 'Hillary'  else 0
-dennis_spend      = total_cost  if paid_by == 'Dennis'   else 0
+hillary_spend = hillary_paid   (entered directly: how much Hillary actually
+dennis_spend  = dennis_paid     fronted out of pocket; the two can split a
+                                 single job's cost between them)
 
 hillary_total_due = hillary_spend + profit × h_ratio / 100
 dennis_total_due  = dennis_spend  + profit × d_ratio / 100
@@ -748,22 +754,32 @@ hillary_remaining = hillary_total_due - hillary_collected
 dennis_remaining  = dennis_total_due  - dennis_collected
 ```
 
+`h_ratio`/`d_ratio` ("Profit Split") divide the job's PROFIT only. They are a
+separate concept from `hillary_paid`/`dennis_paid`, which record who actually
+fronted the COST. The app warns on the record's view page if `hillary_paid +
+dennis_paid` doesn't add up to `total_cost`, since nothing else enforces it.
+
+`paid_by` is a legacy single-payer field, kept in the schema for old records
+but no longer written by the form (deprecated 2026-09).
+
 ### Default ratios: 100/0
 
-By default, `h_ratio = 100`, `d_ratio = 0`. This means Hillary bears 100% of maintenance costs and keeps 100% of maintenance revenue. Dennis is not involved.
+By default, `h_ratio = 100`, `d_ratio = 0`. This means Hillary keeps 100% of
+maintenance profit (or absorbs 100% of a loss) and Dennis is not involved
+in the profit split, independent of who actually fronted the cost.
 
 To change: edit the maintenance record and adjust the ratio sliders. JavaScript keeps `h_ratio + d_ratio = 100`.
 
 ### Worked example — Warranty visit, Hillary paid
 
-Visit cost: 80,000 (parts + labour). Type: Warranty (no revenue). Hillary paid.
+Visit cost: 80,000 (parts + labour, no external service). Type: Warranty (no revenue). Hillary fronted the whole 80,000 (`hillary_paid = 80000`, `dennis_paid = 0`).
 
 ```
 total_cost          = 80,000
 revenue             = 0
 profit              = 0 - 80,000 = -80,000
 
-At 100/0 (default):
+At 100/0 profit split (default):
 hillary_spend       = 80,000
 hillary_total_due   = 80,000 + (-80,000 × 100%) = 80,000 - 80,000 = 0
 dennis_total_due    = 0 + (-80,000 × 0%) = 0
