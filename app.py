@@ -758,15 +758,17 @@ def maintenance_new():
         f  = request.form
         execute("""INSERT INTO maintenance_records
             (linked_quotation_id,client_name,client_phone,visit_date,type,
-             problem,parts_used,parts_cost,labour_fee,paid_by,h_ratio,d_ratio,
+             problem,parts_used,parts_cost,labour_fee,external_cost,external_cost_desc,
+             hillary_paid,dennis_paid,h_ratio,d_ratio,
              executor_name,status,notes,cancellation_reason)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
             (f.get("linked_quotation_id") or None,
              f["client_name"], f.get("client_phone",""),
              f.get("visit_date") or date.today().isoformat(),
              f.get("type","Paid"), f.get("problem",""), f.get("parts_used",""),
-             float(f.get("parts_cost",0)), float(f.get("labour_fee",0)),
-             f.get("paid_by","Hillary"),
+             float(f.get("parts_cost") or 0), float(f.get("labour_fee") or 0),
+             float(f.get("external_cost") or 0), f.get("external_cost_desc",""),
+             float(f.get("hillary_paid") or 0), float(f.get("dennis_paid") or 0),
              int(f.get("h_ratio",100)), int(f.get("d_ratio",0)),
              f.get("executor_name",""),
              f.get("status","Open"), f.get("notes",""),
@@ -790,20 +792,24 @@ def maintenance_view(mid):
         abort(404)
     receipts = query("SELECT * FROM receipts WHERE maintenance_id=%s ORDER BY date", (mid,))
     # Financial summary
-    total_cost        = float(r["parts_cost"] or 0) + float(r["labour_fee"] or 0)
+    total_cost        = (float(r["parts_cost"] or 0) + float(r["labour_fee"] or 0)
+                          + float(r.get("external_cost") or 0))
     h_ratio           = int(r["h_ratio"] or 100)
     d_ratio           = int(r["d_ratio"] or 0)
     revenue           = sum(float(rec["amount_paid"]) for rec in receipts)
     hillary_collected = sum(float(rec["amount_paid"]) for rec in receipts if rec.get("collected_by") == "Hillary")
     dennis_collected  = sum(float(rec["amount_paid"]) for rec in receipts if rec.get("collected_by") == "Dennis")
-    paid_by           = r.get("paid_by") or "Hillary"
-    hillary_spend     = total_cost if paid_by == "Hillary" else 0.0
-    dennis_spend      = total_cost if paid_by == "Dennis"  else 0.0
+    hillary_spend     = float(r.get("hillary_paid") or 0)
+    dennis_spend      = float(r.get("dennis_paid") or 0)
     profit            = revenue - total_cost
     hillary_total_due = hillary_spend + profit * h_ratio / 100
     dennis_total_due  = dennis_spend  + profit * d_ratio / 100
     hillary_remaining = hillary_total_due - hillary_collected
     dennis_remaining  = dennis_total_due  - dennis_collected
+    # Nothing forces hillary_paid+dennis_paid to equal total_cost (e.g. a
+    # record created via the Telegram bot never sets either). Surface the
+    # gap instead of silently under- or over-crediting either person.
+    unattributed_cost = round(total_cost - hillary_spend - dennis_spend, 2)
     fin = dict(
         total_cost=total_cost, revenue=revenue, profit=profit,
         h_ratio=h_ratio, d_ratio=d_ratio,
@@ -811,6 +817,7 @@ def maintenance_view(mid):
         hillary_total_due=hillary_total_due, dennis_total_due=dennis_total_due,
         hillary_collected=hillary_collected, dennis_collected=dennis_collected,
         hillary_remaining=hillary_remaining, dennis_remaining=dennis_remaining,
+        unattributed_cost=unattributed_cost,
     )
     return render_template("maintenance/view.html", r=r, receipts=receipts, fin=fin)
 
@@ -826,13 +833,15 @@ def maintenance_edit(mid):
         execute("""UPDATE maintenance_records SET
             linked_quotation_id=%s,client_name=%s,client_phone=%s,visit_date=%s,
             type=%s,problem=%s,parts_used=%s,parts_cost=%s,labour_fee=%s,
-            paid_by=%s,h_ratio=%s,d_ratio=%s,executor_name=%s,
+            external_cost=%s,external_cost_desc=%s,hillary_paid=%s,dennis_paid=%s,
+            h_ratio=%s,d_ratio=%s,executor_name=%s,
             status=%s,notes=%s,cancellation_reason=%s WHERE id=%s""",
             (f.get("linked_quotation_id") or None,
              f["client_name"],f.get("client_phone",""),f.get("visit_date"),
              f.get("type","Paid"),f.get("problem",""),f.get("parts_used",""),
-             float(f.get("parts_cost",0)),float(f.get("labour_fee",0)),
-             f.get("paid_by","Hillary"),
+             float(f.get("parts_cost") or 0),float(f.get("labour_fee") or 0),
+             float(f.get("external_cost") or 0),f.get("external_cost_desc",""),
+             float(f.get("hillary_paid") or 0),float(f.get("dennis_paid") or 0),
              int(f.get("h_ratio",100)),int(f.get("d_ratio",0)),
              f.get("executor_name",""),
              f.get("status","Open"),f.get("notes",""),

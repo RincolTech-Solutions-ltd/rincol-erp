@@ -43,7 +43,13 @@
         <div class="col-4">
           <div class="small text-muted mb-1">Total Cost</div>
           <div class="fw-bold money text-danger">{{ money(fin.total_cost) }}</div>
-          <div class="small text-muted">Paid by {{ r.paid_by or 'Hillary' }}</div>
+          <div class="small text-muted">Hillary {{ money(fin.hillary_spend) }} &middot; Dennis {{ money(fin.dennis_spend) }}</div>
+          {% if fin.unattributed_cost != 0 %}
+          <div class="small text-warning mt-1">
+            <i class="bi bi-exclamation-triangle"></i>
+            {{ money(fin.unattributed_cost) }} {% if fin.unattributed_cost > 0 %}not yet attributed to anyone.{% else %}over-attributed vs. total cost.{% endif %} Check Who Fronted The Money on the edit page.
+          </div>
+          {% endif %}
         </div>
         <div class="col-4">
           <div class="small text-muted mb-1">Revenue</div>
@@ -61,7 +67,7 @@
 
       {# Per-person breakdown #}
       <div class="rounded p-3" style="background:rgba(255,255,255,.04);border:1px solid #2a2d45">
-        <div class="small text-muted mb-2">Split: Hillary {{ fin.h_ratio }}% / Dennis {{ fin.d_ratio }}%</div>
+        <div class="small text-muted mb-2">Profit Split: Hillary {{ fin.h_ratio }}% / Dennis {{ fin.d_ratio }}%</div>
         <table class="table table-sm mb-0" style="background:transparent">
           <thead><tr>
             <th class="text-muted small fw-normal ps-0"></th>
@@ -209,6 +215,12 @@
           <div class="small text-muted">Labour &amp; Transport</div>
           <div class="money small">{{ money(r.labour_fee) }}</div>
         </div>
+        {% if r.external_cost %}
+        <div class="col-12">
+          <div class="small text-muted">External Service Cost</div>
+          <div class="money small">{{ money(r.external_cost) }}{% if r.external_cost_desc %} ({{ r.external_cost_desc }}){% endif %}</div>
+        </div>
+        {% endif %}
         {% if r.executor_name %}
         <div class="col-12">
           <div class="small text-muted">Executor</div>
