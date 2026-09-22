@@ -206,17 +206,13 @@
           <div class="money small">{{ money(r.parts_cost) }}</div>
         </div>
         <div class="col-6">
-          <div class="small text-muted">Labour Fee</div>
+          <div class="small text-muted">Labour &amp; Transport</div>
           <div class="money small">{{ money(r.labour_fee) }}</div>
         </div>
         {% if r.executor_name %}
-        <div class="col-6">
+        <div class="col-12">
           <div class="small text-muted">Executor</div>
           <div class="small">{{ r.executor_name }}</div>
-        </div>
-        <div class="col-6">
-          <div class="small text-muted">Executor Pay</div>
-          <div class="money small">{{ money(r.executor_payment) }}</div>
         </div>
         {% endif %}
       </div>

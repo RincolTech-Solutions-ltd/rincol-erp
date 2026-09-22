@@ -112,7 +112,7 @@ CREATE TABLE IF NOT EXISTS maintenance_records (
     parts_cost REAL DEFAULT 0,
     labour_fee REAL DEFAULT 0,
     executor_name TEXT DEFAULT '',
-    executor_payment REAL DEFAULT 0,
+    executor_payment REAL DEFAULT 0,  -- DEPRECATED: not written by the web UI since 2026-09; labour_fee is the executor's pay
     status TEXT DEFAULT 'Open',   -- Open / Resolved / Pending Parts
     notes TEXT DEFAULT '',
     created_at TIMESTAMPTZ DEFAULT NOW()

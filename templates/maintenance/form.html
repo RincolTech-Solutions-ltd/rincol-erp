@@ -118,7 +118,7 @@
                    value="{{ r.parts_cost if r else 0 }}">
           </div>
           <div class="col-4">
-            <label class="form-label">Labour Fee (UGX)</label>
+            <label class="form-label">Labour &amp; Transport (UGX)</label>
             <input type="number" name="labour_fee" class="form-control form-control-sm" min="0" step="any"
                    value="{{ r.labour_fee if r else 0 }}">
           </div>
@@ -164,15 +164,11 @@
       <div class="card-header"><span class="section-header mb-0">Executor</span></div>
       <div class="card-body">
         <div class="row g-2">
-          <div class="col-6">
+          <div class="col-12">
             <label class="form-label">Executor Name</label>
             <input type="text" name="executor_name" class="form-control form-control-sm"
                    value="{{ r.executor_name if r else '' }}" placeholder="e.g. Dennis">
-          </div>
-          <div class="col-6">
-            <label class="form-label">Executor Pay (UGX)</label>
-            <input type="number" name="executor_payment" class="form-control form-control-sm" min="0" step="any"
-                   value="{{ r.executor_payment if r else 0 }}">
+            <div class="form-text">What they're paid is the Labour &amp; Transport figure above. There is no separate executor payout field.</div>
           </div>
           <div class="col-12">
             <label class="form-label">Notes</label>
