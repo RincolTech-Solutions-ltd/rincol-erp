@@ -643,8 +643,8 @@ def _finalize_maint_create(chat_id, d, person):
     from utils.notify import notify_maintenance
     execute("""INSERT INTO maintenance_records
                (client_name, client_phone, visit_date, type, problem, status,
-                executor_name, parts_cost, labour_fee, executor_payment, h_ratio, d_ratio)
-               VALUES (%s,%s,%s,'Paid',%s,'Open',%s,0,0,0,100,0)""",
+                executor_name, parts_cost, labour_fee, h_ratio, d_ratio)
+               VALUES (%s,%s,%s,'Paid',%s,'Open',%s,0,0,100,0)""",
             (d["client_name"],
              d.get("client_phone", ""),
              d.get("visit_date", date.today().isoformat()),

@@ -409,7 +409,7 @@ CREATE TABLE maintenance_records (
     h_ratio              INTEGER DEFAULT 100,  -- Hillary's share of profit (%)
     d_ratio              INTEGER DEFAULT 0,    -- Dennis's share of profit (%)
     executor_name        TEXT DEFAULT '',
-    executor_payment     REAL DEFAULT 0,
+    executor_payment     REAL DEFAULT 0,       -- DEPRECATED: not written by the web UI since 2026-09; labour_fee is the executor's pay
     status               TEXT DEFAULT 'Open',  -- Open | Resolved | Pending Parts
     notes                TEXT DEFAULT '',
     created_at           TIMESTAMPTZ DEFAULT NOW()

@@ -759,8 +759,8 @@ def maintenance_new():
         execute("""INSERT INTO maintenance_records
             (linked_quotation_id,client_name,client_phone,visit_date,type,
              problem,parts_used,parts_cost,labour_fee,paid_by,h_ratio,d_ratio,
-             executor_name,executor_payment,status,notes,cancellation_reason)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+             executor_name,status,notes,cancellation_reason)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
             (f.get("linked_quotation_id") or None,
              f["client_name"], f.get("client_phone",""),
              f.get("visit_date") or date.today().isoformat(),
@@ -768,7 +768,7 @@ def maintenance_new():
              float(f.get("parts_cost",0)), float(f.get("labour_fee",0)),
              f.get("paid_by","Hillary"),
              int(f.get("h_ratio",100)), int(f.get("d_ratio",0)),
-             f.get("executor_name",""), float(f.get("executor_payment",0)),
+             f.get("executor_name",""),
              f.get("status","Open"), f.get("notes",""),
              f.get("cancellation_reason","")))
         flash("Maintenance record saved.", "success")
@@ -827,14 +827,14 @@ def maintenance_edit(mid):
             linked_quotation_id=%s,client_name=%s,client_phone=%s,visit_date=%s,
             type=%s,problem=%s,parts_used=%s,parts_cost=%s,labour_fee=%s,
             paid_by=%s,h_ratio=%s,d_ratio=%s,executor_name=%s,
-            executor_payment=%s,status=%s,notes=%s,cancellation_reason=%s WHERE id=%s""",
+            status=%s,notes=%s,cancellation_reason=%s WHERE id=%s""",
             (f.get("linked_quotation_id") or None,
              f["client_name"],f.get("client_phone",""),f.get("visit_date"),
              f.get("type","Paid"),f.get("problem",""),f.get("parts_used",""),
              float(f.get("parts_cost",0)),float(f.get("labour_fee",0)),
              f.get("paid_by","Hillary"),
              int(f.get("h_ratio",100)),int(f.get("d_ratio",0)),
-             f.get("executor_name",""),float(f.get("executor_payment",0)),
+             f.get("executor_name",""),
              f.get("status","Open"),f.get("notes",""),
              f.get("cancellation_reason",""),mid))
         flash("Record updated.","success")
