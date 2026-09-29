@@ -169,8 +169,8 @@ window.PREFILL = {{ prefill | tojson }};
         </select>
       </td>
       <td>
-        <input type="number" name="sl_amount[]" class="form-control form-control-sm text-end sl-amount"
-               min="0" step="any" value="${amount || ''}">
+        <input type="text" inputmode="numeric" name="sl_amount[]" class="form-control form-control-sm text-end sl-amount money-input"
+               value="${amount ? window.formatMoney(String(amount)) : ''}">
       </td>
       <td>
         <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1 remove-sl">
@@ -193,7 +193,7 @@ window.PREFILL = {{ prefill | tojson }};
     const hRatio = parseFloat(document.getElementById('h_ratio').value) || 0;
     const dRatio = parseFloat(document.getElementById('d_ratio').value) || 0;
     let costs = 0;
-    document.querySelectorAll('.sl-amount').forEach(i => { costs += parseFloat(i.value) || 0; });
+    document.querySelectorAll('.sl-amount').forEach(i => { costs += window.moneyVal(i); });
     const profit = quoted - costs;
     const hShare = profit * hRatio / 100;
     const dShare = profit * dRatio / 100;

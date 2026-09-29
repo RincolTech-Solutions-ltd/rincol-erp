@@ -766,9 +766,9 @@ def maintenance_new():
              f["client_name"], f.get("client_phone",""),
              f.get("visit_date") or date.today().isoformat(),
              f.get("type","Paid"), f.get("problem",""), f.get("parts_used",""),
-             float(f.get("parts_cost") or 0), float(f.get("labour_fee") or 0),
-             float(f.get("external_cost") or 0), f.get("external_cost_desc",""),
-             float(f.get("hillary_paid") or 0), float(f.get("dennis_paid") or 0),
+             _safe_float(f.get("parts_cost"), 0), _safe_float(f.get("labour_fee"), 0),
+             _safe_float(f.get("external_cost"), 0), f.get("external_cost_desc",""),
+             _safe_float(f.get("hillary_paid"), 0), _safe_float(f.get("dennis_paid"), 0),
              int(f.get("h_ratio",100)), int(f.get("d_ratio",0)),
              f.get("executor_name",""),
              f.get("status","Open"), f.get("notes",""),
@@ -839,9 +839,9 @@ def maintenance_edit(mid):
             (f.get("linked_quotation_id") or None,
              f["client_name"],f.get("client_phone",""),f.get("visit_date"),
              f.get("type","Paid"),f.get("problem",""),f.get("parts_used",""),
-             float(f.get("parts_cost") or 0),float(f.get("labour_fee") or 0),
-             float(f.get("external_cost") or 0),f.get("external_cost_desc",""),
-             float(f.get("hillary_paid") or 0),float(f.get("dennis_paid") or 0),
+             _safe_float(f.get("parts_cost"), 0),_safe_float(f.get("labour_fee"), 0),
+             _safe_float(f.get("external_cost"), 0),f.get("external_cost_desc",""),
+             _safe_float(f.get("hillary_paid"), 0),_safe_float(f.get("dennis_paid"), 0),
              int(f.get("h_ratio",100)),int(f.get("d_ratio",0)),
              f.get("executor_name",""),
              f.get("status","Open"),f.get("notes",""),
@@ -1250,7 +1250,7 @@ def balancing_edit(jid=None):
                 execute(
                     "INSERT INTO balancing_spend_lines (balancing_job_id, description, paid_by, amount) "
                     "VALUES (%s,%s,%s,%s)",
-                    (jid, desc.strip(), paid_by, float(amt))
+                    (jid, desc.strip(), paid_by, _safe_float(amt, 0))
                 )
         flash("Job saved.", "success")
         saved_job = query_one(
@@ -1330,7 +1330,7 @@ def balancing_status(jid):
 def balancing_spend_add(jid):
     f = request.form
     execute("INSERT INTO balancing_spend_lines (balancing_job_id, paid_by, description, amount, date) VALUES (%s,%s,%s,%s,%s)",
-            (jid, f["paid_by"], f["description"], float(f["amount"]), f.get("date") or None))
+            (jid, f["paid_by"], f["description"], _safe_float(f.get("amount"), 0), f.get("date") or None))
     flash("Spend line added.", "success")
     return redirect(url_for("balancing_view", jid=jid))
 
@@ -1348,7 +1348,7 @@ def balancing_spend_delete(jid, sid):
 @login_required
 def balancing_settlement_add(jid):
     f           = request.form
-    amount      = float(f["amount"])
+    amount      = _safe_float(f.get("amount"), 0)
     from_person = f.get("from_person", "Hillary")
     to_person   = "Dennis" if from_person == "Hillary" else "Hillary"
     notes       = f.get("notes", "")
@@ -1621,9 +1621,11 @@ def _safe_float(val, default=0):
     return float(val)
 
 def _safe_int(val, default=0):
-    """Convert form value to int, handling empty strings."""
+    """Convert form value to int, handling empty strings and commas."""
     if not val or val == '':
         return int(default)
+    if isinstance(val, str):
+        val = val.replace(',', '')
     return int(val)
 
 def _params_from_form(f):
@@ -2534,7 +2536,7 @@ def solar_bom_edit(sid):
                     continue
                 line += 1
                 qty   = float(qty_s or 0)
-                price = float(price_s or 0)
+                price = _safe_float(price_s, 0)
                 total = round(qty * price, 0)
                 bom_total += total
                 execute("""
