@@ -820,6 +820,10 @@ JavaScript handles UI-only interactions that do not need a server round-trip:
 - Sidebar mobile toggle
 - Template loading (one `fetch()` call to `/api/template/<id>`)
 
+### Money input fields
+
+Every field holding a currency *amount* is `<input type="text">` with `class="money-input"`, never `type="number"`, and `inputmode="numeric"` (or `decimal` where the field genuinely takes cents, as on the receipt form). (Small per-unit rates that never reach four digits, such as the per-kWh utility tariff, stay `type="number"`; they need no thousands separator. Quantities, watts, voltages, percentages and day counts are not money and also stay `type="number"`.) A number input silently discards any value containing a comma, so a hand-rolled comma-formatter that writes back into `.value` blanks the field mid-typing (this is what issue #40 fixed). `static/js/main.js` has the one sanctioned money-field component: it formats with commas as you type, formats initial values on load, picks up dynamically added rows, and strips commas from every `.money-input` on form submit before the server sees it. `window.formatMoney(val)` formats a value; `window.moneyVal(el)` reads a `.money-input` element back as a comma-stripped number for client-side totals. Server-side, form values still arrive with commas if JavaScript didn't run, so every route reads them through `_safe_float`/`_safe_int` (both strip commas), never a bare `float()`/`int()`. The next money field should reuse this component, not hand-roll another formatter.
+
 ### The API endpoint
 
 `GET /api/template/<id>` returns JSON. This is the only "API" endpoint — all other routes return HTML. Called by JavaScript when loading a Quick Build template.

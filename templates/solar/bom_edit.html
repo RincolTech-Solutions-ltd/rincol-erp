@@ -63,7 +63,7 @@
               </select>
             </td>
             <td><input type="number" name="qty[]" class="form-control form-control-sm text-end bom-qty" value="{{ '{:.0f}'.format(item.qty) }}" min="0" step="0.01" oninput="recalcRow(this)"></td>
-            <td><input type="number" name="unit_price[]" class="form-control form-control-sm text-end bom-price" value="{{ '{:.0f}'.format(item.unit_price) }}" min="0" oninput="recalcRow(this)"></td>
+            <td><input type="text" inputmode="numeric" name="unit_price[]" class="form-control form-control-sm text-end bom-price money-input" value="{{ '{:,.0f}'.format(item.unit_price) }}" oninput="recalcRow(this)"></td>
             <td class="text-end align-middle bom-row-total fw-semibold small">{{ '{:,.0f}'.format(item.total) }}</td>
             <td class="text-center align-middle">
               <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="removeRow(this)" title="Remove row">
@@ -142,7 +142,7 @@ function addRow() {
     <td><input type="text" name="description[]" class="form-control form-control-sm bom-desc" list="bom-catalog-list" autocomplete="off" placeholder="Description or search catalog..." required></td>
     <td><select name="uom[]" class="form-select form-select-sm">${UOM_OPTIONS}</select></td>
     <td><input type="number" name="qty[]" class="form-control form-control-sm text-end bom-qty" value="1" min="0" step="0.01" oninput="recalcRow(this)"></td>
-    <td><input type="number" name="unit_price[]" class="form-control form-control-sm text-end bom-price" value="0" min="0" oninput="recalcRow(this)"></td>
+    <td><input type="text" inputmode="numeric" name="unit_price[]" class="form-control form-control-sm text-end bom-price money-input" value="0" oninput="recalcRow(this)"></td>
     <td class="text-end align-middle bom-row-total fw-semibold small">0</td>
     <td class="text-center align-middle">
       <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="removeRow(this)">
@@ -162,7 +162,7 @@ function removeRow(btn) {
 function recalcRow(input) {
   const row   = input.closest('tr');
   const qty   = parseFloat(row.querySelector('.bom-qty').value) || 0;
-  const price = parseFloat(row.querySelector('.bom-price').value) || 0;
+  const price = window.moneyVal(row.querySelector('.bom-price'));
   const total = qty * price;
   row.querySelector('.bom-row-total').textContent = total.toLocaleString('en-UG', {maximumFractionDigits: 0});
   recalcTotal();
@@ -172,7 +172,7 @@ function recalcTotal() {
   let grand = 0;
   document.querySelectorAll('.bom-row').forEach(row => {
     const qty   = parseFloat(row.querySelector('.bom-qty').value) || 0;
-    const price = parseFloat(row.querySelector('.bom-price').value) || 0;
+    const price = window.moneyVal(row.querySelector('.bom-price'));
     grand += qty * price;
   });
   const fmt = 'UGX ' + grand.toLocaleString('en-UG', {maximumFractionDigits: 0});

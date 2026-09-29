@@ -55,9 +55,9 @@ window.PREFILL = {{ prefill | tojson }};
         <div class="row g-2">
           <div class="col-12">
             <label class="form-label">Quoted Amount (UGX) *</label>
-            <input type="number" name="quoted" id="b_quoted" class="form-control form-control-sm"
-                   min="0" step="any" required
-                   value="{{ job.quoted if job else prefill.get('quoted', 0) }}">
+            <input type="text" inputmode="numeric" name="quoted" id="b_quoted"
+                   class="form-control form-control-sm money-input" required
+                   value="{{ '{:,.0f}'.format((job.quoted if job else prefill.get('quoted', 0)) or 0) }}">
           </div>
         </div>
       </div>
@@ -169,8 +169,8 @@ window.PREFILL = {{ prefill | tojson }};
         </select>
       </td>
       <td>
-        <input type="number" name="sl_amount[]" class="form-control form-control-sm text-end sl-amount"
-               min="0" step="any" value="${amount || ''}">
+        <input type="text" inputmode="numeric" name="sl_amount[]" class="form-control form-control-sm text-end sl-amount money-input"
+               value="${amount ? window.formatMoney(String(amount)) : ''}">
       </td>
       <td>
         <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1 remove-sl">
@@ -189,11 +189,11 @@ window.PREFILL = {{ prefill | tojson }};
 
   // ── Preview calculator ────────────────────────────────────────────────────
   function updatePreview() {
-    const quoted = parseFloat(document.getElementById('b_quoted').value) || 0;
+    const quoted = window.moneyVal(document.getElementById('b_quoted'));
     const hRatio = parseFloat(document.getElementById('h_ratio').value) || 0;
     const dRatio = parseFloat(document.getElementById('d_ratio').value) || 0;
     let costs = 0;
-    document.querySelectorAll('.sl-amount').forEach(i => { costs += parseFloat(i.value) || 0; });
+    document.querySelectorAll('.sl-amount').forEach(i => { costs += window.moneyVal(i); });
     const profit = quoted - costs;
     const hShare = profit * hRatio / 100;
     const dShare = profit * dRatio / 100;
@@ -212,7 +212,7 @@ window.PREFILL = {{ prefill | tojson }};
     const opt = this.options[this.selectedIndex];
     if (!opt.value) return;
     const amount = parseFloat(opt.dataset.amount) || 0;
-    document.getElementById('b_quoted').value = amount;
+    document.getElementById('b_quoted').value = window.formatMoney(String(amount));
     if (isNew && !document.getElementById('b_job_name').value.trim()) {
       document.getElementById('b_job_name').value = opt.dataset.label || '';
     }

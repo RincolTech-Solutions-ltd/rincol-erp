@@ -192,7 +192,7 @@
 
   function fmt(n){ return 'UGX ' + Math.round(n).toLocaleString(); }
 
-  function raw(el){ return parseFloat((el.value||'').replace(/,/g,'')) || 0; }
+  function raw(el){ return window.moneyVal(el); }
 
   function recalc(){
     const total     = raw(amtFig);

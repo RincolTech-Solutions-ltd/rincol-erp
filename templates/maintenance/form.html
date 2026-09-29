@@ -114,18 +114,18 @@
         <div class="row g-2">
           <div class="col-4">
             <label class="form-label">Parts Cost (UGX)</label>
-            <input type="number" name="parts_cost" class="form-control form-control-sm" min="0" step="any"
-                   value="{{ r.parts_cost if r else 0 }}">
+            <input type="text" inputmode="numeric" name="parts_cost" class="form-control form-control-sm money-input"
+                   value="{{ '{:,.0f}'.format(r.parts_cost or 0) if r else '0' }}">
           </div>
           <div class="col-4">
             <label class="form-label">Labour &amp; Transport (UGX)</label>
-            <input type="number" name="labour_fee" class="form-control form-control-sm" min="0" step="any"
-                   value="{{ r.labour_fee if r else 0 }}">
+            <input type="text" inputmode="numeric" name="labour_fee" class="form-control form-control-sm money-input"
+                   value="{{ '{:,.0f}'.format(r.labour_fee or 0) if r else '0' }}">
           </div>
           <div class="col-4">
             <label class="form-label">External Service Cost (UGX)</label>
-            <input type="number" name="external_cost" class="form-control form-control-sm" min="0" step="any"
-                   value="{{ r.external_cost if r else 0 }}">
+            <input type="text" inputmode="numeric" name="external_cost" class="form-control form-control-sm money-input"
+                   value="{{ '{:,.0f}'.format(r.external_cost or 0) if r else '0' }}">
           </div>
           <div class="col-12">
             <label class="form-label">External Service Description <span class="text-muted small">(e.g. "Lento, boost charging")</span></label>
@@ -138,16 +138,16 @@
               <div class="col-4">
                 <div class="input-group input-group-sm">
                   <span class="input-group-text">Hillary</span>
-                  <input type="number" name="hillary_paid" class="form-control text-end" min="0" step="any"
-                         value="{{ r.hillary_paid if r else 0 }}">
+                  <input type="text" inputmode="numeric" name="hillary_paid" class="form-control text-end money-input"
+                         value="{{ '{:,.0f}'.format(r.hillary_paid or 0) if r else '0' }}">
                 </div>
               </div>
               <div class="col-1 text-center text-muted">+</div>
               <div class="col-4">
                 <div class="input-group input-group-sm">
                   <span class="input-group-text">Dennis</span>
-                  <input type="number" name="dennis_paid" class="form-control text-end" min="0" step="any"
-                         value="{{ r.dennis_paid if r else 0 }}">
+                  <input type="text" inputmode="numeric" name="dennis_paid" class="form-control text-end money-input"
+                         value="{{ '{:,.0f}'.format(r.dennis_paid or 0) if r else '0' }}">
                 </div>
               </div>
               <div class="col-3 text-muted small" id="maint_paid_check"></div>
@@ -267,8 +267,8 @@
   const paidChk    = document.getElementById('maint_paid_check');
   function syncPaidCheck() {
     if (!paidChk) return;
-    const total = (parseFloat(partsIn?.value)||0) + (parseFloat(labourIn?.value)||0) + (parseFloat(externalIn?.value)||0);
-    const paid  = (parseFloat(hPaidIn?.value)||0) + (parseFloat(dPaidIn?.value)||0);
+    const total = (partsIn ? window.moneyVal(partsIn) : 0) + (labourIn ? window.moneyVal(labourIn) : 0) + (externalIn ? window.moneyVal(externalIn) : 0);
+    const paid  = (hPaidIn ? window.moneyVal(hPaidIn) : 0) + (dPaidIn ? window.moneyVal(dPaidIn) : 0);
     paidChk.textContent = (Math.abs(total - paid) < 1) ? '' : `⚠ total ${total.toLocaleString()} vs paid ${paid.toLocaleString()}`;
   }
   [partsIn, labourIn, externalIn, hPaidIn, dPaidIn].forEach(el => el?.addEventListener('input', syncPaidCheck));

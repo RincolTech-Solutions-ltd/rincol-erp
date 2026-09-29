@@ -24,6 +24,11 @@ function fmt(n) {
   }
   window.formatMoney = formatMoney;
 
+  // Usage: window.moneyVal(el) reads a .money-input's numeric value, comma-stripped.
+  window.moneyVal = function (el) {
+    return parseFloat(String(el.value).replace(/,/g, '')) || 0;
+  };
+
   function applyFormatter(el) {
     el.addEventListener('input', function () {
       const pos = this.selectionStart;
@@ -102,7 +107,7 @@ function initColResize(tableId) {
 
   function recalcRow(row) {
     const qty   = parseFloat(row.querySelector('.col-qty').value) || 0;
-    const price = parseFloat((row.querySelector('.col-price').value || '').replace(/,/g, '')) || 0;
+    const price = window.moneyVal(row.querySelector('.col-price'));
     const total = qty * price;
     const totalEl = row.querySelector('.col-total');
     totalEl.textContent = fmt(total);
@@ -427,7 +432,8 @@ function initColResize(tableId) {
   function recalcBalancing() {
     // On the form page we only have the quoted amount; costs are added later as spend lines.
     // Preview shows the split assuming zero costs so Hillary/Dennis can see their expected share.
-    const quoted = parseFloat(document.getElementById('b_quoted')?.value || 0);
+    const quotedEl = document.getElementById('b_quoted');
+    const quoted = quotedEl ? window.moneyVal(quotedEl) : 0;
     const hr     = parseInt(hRatio.value) || 45;
     const dr     = parseInt(dRatio.value) || 55;
     const profit = quoted;   // estimate: no costs known yet

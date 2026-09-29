@@ -300,8 +300,8 @@ showSpecs(document.getElementById('category').value);
   var sellIn = document.getElementById('sell_price');
   var disp   = document.getElementById('markup-display');
   function calc() {
-    var buy  = parseFloat((buyIn.value  || '').replace(/,/g, '')) || 0;
-    var sell = parseFloat((sellIn.value || '').replace(/,/g, '')) || 0;
+    var buy  = window.moneyVal(buyIn);
+    var sell = window.moneyVal(sellIn);
     if (!buy || !sell) { disp.textContent = '—'; disp.style.color = ''; return; }
     var val  = sell - buy;
     var pct  = (val / buy * 100).toFixed(1);
