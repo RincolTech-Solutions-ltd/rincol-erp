@@ -24,6 +24,11 @@ function fmt(n) {
   }
   window.formatMoney = formatMoney;
 
+  // Usage: window.moneyVal(el) reads a .money-input's numeric value, comma-stripped.
+  window.moneyVal = function (el) {
+    return parseFloat(String(el.value).replace(/,/g, '')) || 0;
+  };
+
   function applyFormatter(el) {
     el.addEventListener('input', function () {
       const pos = this.selectionStart;
