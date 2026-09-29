@@ -107,7 +107,7 @@ function initColResize(tableId) {
 
   function recalcRow(row) {
     const qty   = parseFloat(row.querySelector('.col-qty').value) || 0;
-    const price = parseFloat((row.querySelector('.col-price').value || '').replace(/,/g, '')) || 0;
+    const price = window.moneyVal(row.querySelector('.col-price'));
     const total = qty * price;
     const totalEl = row.querySelector('.col-total');
     totalEl.textContent = fmt(total);

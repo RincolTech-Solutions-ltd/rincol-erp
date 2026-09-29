@@ -89,10 +89,13 @@ class TestSafeInt:
     # JUSTIFICATION-A3: added coverage for the comma-plus-decimal case that
     # plain int() raised on before this change.
     @pytest.mark.parametrize("raw,expected", [
-        ("1,250.50", 1250),
-        ("1250.99",  1250),
-        ("-1,250.9", -1250),
+        ("1250.99",  1251),
+        ("-1,250.9", -1251),
+        ("1,250.4",  1250),
+        ("1,250.5",  1250),   # round() is banker's rounding: .5 goes to even
     ])
-    def test_decimal_truncates_instead_of_raising(self, raw, expected):
-        # int("1250.50") raises ValueError, so _safe_int goes via float()
+    def test_decimal_rounds_instead_of_raising(self, raw, expected):
+        # int("1250.50") raises ValueError, so _safe_int goes via float(), and
+        # rounds rather than truncates so the saved value matches the rounded
+        # figure the template renders with '{:,.0f}'
         assert app._safe_int(raw, 0) == expected

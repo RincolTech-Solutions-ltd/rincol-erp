@@ -254,7 +254,7 @@ def _save_quotation(qid):
         if not d.strip():
             continue
         qty_v   = float(q or 0)
-        price_v = float(p or 0)
+        price_v = _safe_float(p, 0)
         total   = qty_v * price_v
         subtotal += total
         items.append((qid, i, d.strip(), u or "pc", qty_v, price_v, total))
@@ -1626,9 +1626,11 @@ def _safe_int(val, default=0):
         return int(default)
     if isinstance(val, str):
         val = val.replace(',', '')
-    # via float so a comma-formatted decimal ("1,250.50") truncates instead of
-    # raising ValueError, which int() would do on any non-integer string
-    return int(float(val))
+    # via float so a comma-formatted decimal ("1,250.50") rounds instead of
+    # raising ValueError, which int() would do on any non-integer string.
+    # Rounds rather than truncates so a saved value matches the rounded
+    # figure the template displays.
+    return int(round(float(val)))
 
 def _params_from_form(f):
     return {
