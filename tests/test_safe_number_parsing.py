@@ -33,6 +33,39 @@ class TestSafeFloat:
     def test_zero_default_when_unspecified(self):
         assert app._safe_float("") == 0.0
 
+    # JUSTIFICATION-A3: pure added test coverage for the edge cases the
+    # adversarial review found untested; no production code is involved.
+    @pytest.mark.parametrize("raw,expected", [
+        ("-1,250",    -1250.0),
+        ("-1,250.75", -1250.75),
+        ("  1,250  ", 1250.0),
+    ])
+    def test_negatives_and_whitespace(self, raw, expected):
+        # a credit note or a correction can legitimately be negative, and the
+        # submit-time comma stripper leaves surrounding whitespace alone
+        assert app._safe_float(raw, 0) == expected
+
+    def test_literal_zero_string_is_zero_not_the_default(self):
+        # "0" is truthy as a string, so it must not fall through to the default;
+        # this is the trap that would make a deliberately zeroed cost silently
+        # reappear as the field's default figure
+        assert app._safe_float("0", 750000) == 0.0
+
+    def test_falsy_numeric_zero_takes_the_default(self):
+        # documents current behaviour: an actual 0 (not "0") is falsy, so the
+        # default wins. Every money caller passes a default of 0, so this is
+        # harmless there, but it must not be changed blindly.
+        assert app._safe_float(0, 750000) == 750000.0
+
+    @pytest.mark.parametrize("raw", ["abc", "1.2.3", ",", "12 000"])
+    def test_non_numeric_raises(self, raw):
+        # pinned deliberately: the routes have no field-level validation, so a
+        # non-numeric money value is a 500, not a silent zero. If that ever
+        # becomes a flash message instead, this test should be what forces the
+        # decision to be explicit.
+        with pytest.raises(ValueError):
+            app._safe_float(raw, 0)
+
 
 class TestSafeInt:
 
@@ -52,3 +85,14 @@ class TestSafeInt:
 
     def test_zero_default_when_unspecified(self):
         assert app._safe_int("") == 0
+
+    # JUSTIFICATION-A3: added coverage for the comma-plus-decimal case that
+    # plain int() raised on before this change.
+    @pytest.mark.parametrize("raw,expected", [
+        ("1,250.50", 1250),
+        ("1250.99",  1250),
+        ("-1,250.9", -1250),
+    ])
+    def test_decimal_truncates_instead_of_raising(self, raw, expected):
+        # int("1250.50") raises ValueError, so _safe_int goes via float()
+        assert app._safe_int(raw, 0) == expected

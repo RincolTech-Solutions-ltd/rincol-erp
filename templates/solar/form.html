@@ -631,7 +631,9 @@ var _applianceItems = [
 // ── Catalog auto-fill (uses shared initCatalogSearch from catalog-search.js) ──
 function setVal(name, val) {
   const el = document.querySelector('[name="' + name + '"]');
-  if (el && val !== undefined && val !== '' && val !== '0') el.value = val;
+  if (!el || val === undefined || val === '' || val === '0') return;
+  // money fields hold a comma-formatted string, so route through the shared formatter
+  el.value = el.classList.contains('money-input') ? window.formatMoney(String(val)) : val;
 }
 
 initCatalogSearch({

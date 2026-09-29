@@ -495,7 +495,7 @@ def quotations_status(qid):
 @login_required
 def payments_add(qid):
     execute("INSERT INTO payments (quotation_id, date, amount, method, notes) VALUES (%s,%s,%s,%s,%s)",
-            (qid, request.form["date"], float(request.form["amount"]),
+            (qid, request.form["date"], _safe_float(request.form["amount"], 0),
              request.form.get("method","Cash"), request.form.get("notes","")))
     flash("Payment recorded.", "success")
     return redirect(url_for("quotations_view", qid=qid))
@@ -521,7 +521,7 @@ def executions_add(qid):
         "INSERT INTO job_executions (quotation_id, executor_name, executor_payment, execution_date, notes) "
         "VALUES (%s,%s,%s,%s,%s)",
         (qid, name,
-         float(request.form.get("executor_payment", 0) or 0),
+         _safe_float(request.form.get("executor_payment"), 0),
          request.form.get("execution_date") or None,
          request.form.get("notes", ""))
     )
@@ -590,8 +590,8 @@ def receipts_new():
         if manual_rno and manual_rno != f"RCT-{yr}-???":
             rno = manual_rno
 
-        fig  = float(f.get("amount_fig", 0))
-        paid = float(f.get("amount_paid", 0))
+        fig  = _safe_float(f.get("amount_fig"), 0)
+        paid = _safe_float(f.get("amount_paid"), 0)
         qid  = f.get("quotation_id") or None
         mid  = f.get("maintenance_id") or None
 
@@ -682,8 +682,8 @@ def receipts_edit(rid):
         abort(404)
     if request.method == "POST":
         f    = request.form
-        fig  = float(f.get("amount_fig", 0))
-        paid = float(f.get("amount_paid", 0))
+        fig  = _safe_float(f.get("amount_fig"), 0)
+        paid = _safe_float(f.get("amount_paid"), 0)
         qid  = f.get("quotation_id") or None
         execute("""UPDATE receipts SET
             receipt_no=%s, date=%s, customer_name=%s, customer_phone=%s,
@@ -925,7 +925,7 @@ def catalog_edit(item_id=None):
                    sell_price=EXCLUDED.sell_price, supplier_id=EXCLUDED.supplier_id,
                    notes=EXCLUDED.notes, spec_data=EXCLUDED.spec_data""",
                 (iid, cat, f["name"], f.get("spec",""), f.get("uom","pc"),
-                 int(f.get("buy_price") or 0), int(f.get("sell_price") or 0),
+                 _safe_int(f.get("buy_price"), 0), _safe_int(f.get("sell_price"), 0),
                  f.get("supplier_id",""), f.get("notes",""), json.dumps(spec_data)))
         flash("Item saved.", "success")
         return redirect(url_for("catalog_list"))
@@ -1237,7 +1237,7 @@ def balancing_edit(jid=None):
         """, (jid, f["job_name"],
               f.get("linked_quotation_id") or None,
               f.get("date") or date.today().isoformat(),
-              float(f.get("quoted", 0)),
+              _safe_float(f.get("quoted"), 0),
               int(f.get("h_ratio", 45)),
               int(f.get("d_ratio", 55)),
               f.get("notes", "")))
@@ -1626,7 +1626,9 @@ def _safe_int(val, default=0):
         return int(default)
     if isinstance(val, str):
         val = val.replace(',', '')
-    return int(val)
+    # via float so a comma-formatted decimal ("1,250.50") truncates instead of
+    # raising ValueError, which int() would do on any non-integer string
+    return int(float(val))
 
 def _params_from_form(f):
     return {

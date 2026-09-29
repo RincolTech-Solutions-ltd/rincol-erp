@@ -432,7 +432,8 @@ function initColResize(tableId) {
   function recalcBalancing() {
     // On the form page we only have the quoted amount; costs are added later as spend lines.
     // Preview shows the split assuming zero costs so Hillary/Dennis can see their expected share.
-    const quoted = parseFloat(document.getElementById('b_quoted')?.value || 0);
+    const quotedEl = document.getElementById('b_quoted');
+    const quoted = quotedEl ? window.moneyVal(quotedEl) : 0;
     const hr     = parseInt(hRatio.value) || 45;
     const dr     = parseInt(dRatio.value) || 55;
     const profit = quoted;   // estimate: no costs known yet
