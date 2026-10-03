@@ -26,7 +26,7 @@
     </button>
     <form method="post" action="{{ url_for('customers_send_statement', cid=customer.id) }}" class="d-inline">
       <button type="submit" class="btn btn-sm btn-primary"
-              {% if not customer.email %}disabled title="No email on record"{% endif %}>
+              {% if not customer.email and not customer.phone %}disabled title="No email or phone on record"{% else %}title="Sends the statement PDF by email and WhatsApp to whichever is on record"{% endif %}>
         <i class="bi bi-send"></i> Send Statement
       </button>
     </form>

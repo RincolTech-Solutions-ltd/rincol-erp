@@ -523,15 +523,20 @@ def notify_task(record: dict, action: str = "created"):
 
 # ── Customer statement ────────────────────────────────────────────────────────
 
-def send_customer_statement(customer: dict, stats: dict, pdf_bytes: bytes, statement_url: str):
+def send_customer_statement(customer: dict, stats: dict, pdf_bytes: bytes,
+                            statement_url: str, to: str) -> bool:
     """Email a customer their account statement PDF + link to the live statement page."""
-    if not _GMAIL_PASS or not customer.get("email"):
-        return
+    if not _GMAIL_PASS:
+        print(f"[STATEMENT-EMAIL] SKIP: no Gmail SMTP password configured", flush=True)
+        return False
     name    = customer.get("name", "Valued Customer")
     cust_no = customer.get("customer_no", "")
     total_o = stats.get("total_outstanding", 0) or 0
     owed_line = (f"UGX {total_o:,.0f} outstanding across your account."
                  if total_o > 0 else "Your account is fully settled — thank you!")
+    # user-entered fields are escaped for the HTML body only; the subject
+    # and the attachment filename are plain text and stay raw
+    h_name, h_cust_no, h_url = escape(name), escape(cust_no), escape(statement_url)
 
     html_body = f"""
     <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto">
@@ -540,16 +545,16 @@ def send_customer_statement(customer: dict, stats: dict, pdf_bytes: bytes, state
         <div style="color:#6b7280;font-size:12px;margin-top:4px">Solar & Energy Solutions</div>
       </div>
       <div style="border:1px solid #e5e7eb;border-top:none;padding:28px;border-radius:0 0 8px 8px">
-        <p style="margin:0 0 16px">Dear <strong>{name}</strong>,</p>
+        <p style="margin:0 0 16px">Dear <strong>{h_name}</strong>,</p>
         <p style="margin:0 0 16px;color:#374151">
-          Please find attached your account statement (Ref: <strong>{cust_no}</strong>).
+          Please find attached your account statement (Ref: <strong>{h_cust_no}</strong>).
           {owed_line}
         </p>
         <p style="margin:0 0 16px;color:#374151">
           You can also view your live statement online at any time using the link below:
         </p>
         <div style="margin:20px 0;text-align:center">
-          <a href="{statement_url}"
+          <a href="{h_url}"
              style="background:#89b4fa;color:#1a1d2e;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:bold">
             View Statement Online
           </a>
@@ -567,8 +572,8 @@ def send_customer_statement(customer: dict, stats: dict, pdf_bytes: bytes, state
       </div>
     </div>"""
 
-    _smtp_send([customer["email"]],
-             f"Account Statement — {name} ({cust_no}) — Rincol Tech Solutions",
+    return _smtp_send([to],
+             f"Account Statement: {name} ({cust_no}) from Rincol Tech Solutions",
              html_body,
              attachments=[{"filename": f"Statement_{cust_no}.pdf",
                            "content": base64.b64encode(pdf_bytes).decode()}])

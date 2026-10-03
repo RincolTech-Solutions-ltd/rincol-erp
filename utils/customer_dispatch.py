@@ -13,8 +13,8 @@ flash, shown with |safe in base.html) must escape them first.
 import os
 
 
-from utils.notify import send_receipt_to_customer
-from utils.pdf import build_receipt_pdf
+from utils.notify import send_customer_statement, send_receipt_to_customer
+from utils.pdf import build_receipt_pdf, build_statement_pdf
 from utils.whatsapp import send_document_whatsapp
 
 _SIG_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -32,20 +32,21 @@ def load_default_sig():
 
 def dispatch_to_customer(doc_label: str, doc_no: str, client: str,
                          email: str, phone: str, pdf_bytes: bytes,
-                         caption_lines: list, send_email) -> tuple:
+                         caption_lines: list, send_email, file_stem: str = None) -> tuple:
     """Email then WhatsApp the PDF to whichever contacts are on file.
 
     send_email: callable(email_address) -> bool, the document's own email sender.
     caption_lines: the WhatsApp caption, plain text; an "also emailed" line is
     appended when the email went through.
+    file_stem: the PDF's filename on WhatsApp, if it should differ from doc_no.
     Returns (plain_text_message, flash_category).
     """
     email = (email or "").strip()
     phone = (phone or "").strip()
 
     if not email and not phone:
-        return (f"{doc_label} {doc_no} saved. No email or phone on file for {client}, "
-                f"so nothing was sent to the customer."), "warning"
+        return (f"No email or phone on file for {client}, so {doc_label.lower()} {doc_no} "
+                f"was not sent; nothing was sent to the customer."), "warning"
     if not pdf_bytes:
         return f"⚠️ PDF generation failed, {doc_label.lower()} {doc_no} was NOT sent to {client}.", "warning"
 
@@ -56,7 +57,7 @@ def dispatch_to_customer(doc_label: str, doc_no: str, client: str,
         lines = list(caption_lines)
         if email_ok:
             lines.append(f"\nThe same has been sent to your email: {email}")
-        wa_ok, wa_msg = send_document_whatsapp(phone, doc_no, pdf_bytes, "\n".join(lines))
+        wa_ok, wa_msg = send_document_whatsapp(phone, file_stem or doc_no, pdf_bytes, "\n".join(lines))
 
     parts = []
     if email:
@@ -98,3 +99,30 @@ def dispatch_receipt(r: dict) -> tuple:
     return dispatch_to_customer(
         "Receipt", rno, client, email, phone, pdf_bytes, caption,
         lambda to: send_receipt_to_customer(rno, client, paid, balance, method, to, pdf_bytes))
+
+
+def dispatch_statement(customer: dict, quotations: list, stats: dict, statement_url: str) -> tuple:
+    """Build the account statement PDF and send it to the customer. See dispatch_to_customer."""
+    name    = (customer.get("name") or "").strip()
+    cust_no = customer.get("customer_no") or "-"
+    email   = (customer.get("email") or "").strip()
+    phone   = (customer.get("phone") or "").strip()
+    owed    = float(stats.get("total_outstanding") or 0)
+
+    pdf_bytes = None
+    if email or phone:
+        try:
+            pdf_bytes = build_statement_pdf(customer, quotations, stats)
+        except Exception as e:
+            print(f"[STATEMENT] PDF build FAILED for {cust_no}: {e}", flush=True)
+
+    caption = [
+        f"*Rincol Tech Solutions Ltd*: Account Statement {cust_no}",
+        f"Customer: {name}",
+        f"Outstanding: UGX {owed:,.0f}" if owed > 0 else "Your account is fully settled, thank you!",
+        f"View your live statement any time: {statement_url}",
+    ]
+    return dispatch_to_customer(
+        "Statement", cust_no, name, email, phone, pdf_bytes, caption,
+        lambda to: send_customer_statement(customer, stats, pdf_bytes, statement_url, to),
+        file_stem=f"Statement_{cust_no}")

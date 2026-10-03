@@ -9,12 +9,17 @@ from functools import wraps
 from flask import (Flask, render_template, request, redirect, url_for,
                    session, flash, send_file, jsonify, abort)
 from markupsafe import escape
+from werkzeug.middleware.proxy_fix import ProxyFix
 from dotenv import load_dotenv
 from supabase import create_client, Client
 
 load_dotenv()
 
 app = Flask(__name__)
+# gunicorn listens on 127.0.0.1 only, so the single hop in front of it is our
+# nginx, which sets X-Forwarded-Proto https. Without this, url_for(_external=True)
+# builds http:// links, including the token-gated statement link sent to customers.
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 app.secret_key = os.environ["FLASK_SECRET_KEY"]
 
 
@@ -39,8 +44,8 @@ from utils.pdf import build_quotation_pdf, build_receipt_pdf, build_statement_pd
 from utils.notify import (notify_maintenance, notify_quotation,
                            notify_quotation_status, notify_receipt,
                            notify_task, notify_settlement, notify_balancing_job,
-                           send_customer_statement, send_quotation_to_customer)
-from utils.customer_dispatch import (dispatch_to_customer, dispatch_receipt,
+                           send_quotation_to_customer)
+from utils.customer_dispatch import (dispatch_to_customer, dispatch_receipt, dispatch_statement,
                                      load_default_sig as _load_default_sig)
 from utils.tg_bot import handle_update as _tg_handle_update
 
@@ -2681,17 +2686,9 @@ def customers_send_statement(cid):
     stats     = _customer_stats(cid)
     quotations = _customer_quotations(cid)
     stmt_url  = url_for("statement_public", token=customer["statement_token"], _external=True)
-    try:
-        pdf_bytes = build_statement_pdf(customer, quotations, stats)
-        import threading
-        threading.Thread(
-            target=send_customer_statement,
-            args=(customer, stats, pdf_bytes, stmt_url),
-            daemon=True,
-        ).start()
-        flash(f"Statement sent to {customer['email']}. Share this link too: {stmt_url}", "success")
-    except Exception as e:
-        flash(f"Could not generate statement PDF: {e}", "danger")
+    msg, category = dispatch_statement(customer, quotations, stats, stmt_url)
+    # flash is rendered |safe and echoes user-editable fields, so escape it
+    flash(str(escape(f"{msg} Live statement link: {stmt_url}")), category)
     return redirect(url_for("customers_profile", cid=cid))
 
 

@@ -5,7 +5,7 @@ workspace "Rincol Web ERP" "Business management system for Rincol Tech Solutions
         # ── People ────────────────────────────────────────────────────────────
         hillary = person "Hillary Arinda" "Admin user. Creates quotations, manages finances, balancing, solar sizing." "Admin"
         dennis  = person "Dennis Kaweesi" "Field technician. Executes installations, views assigned jobs." "Field"
-        customer = person "Customer" "End customer. Views account statement via a token-gated public link (no login required). Receives quotations and receipts by email and WhatsApp, and statements by email." "External"
+        customer = person "Customer" "End customer. Views account statement via a token-gated public link (no login required). Receives quotations, receipts and account statements by email and WhatsApp." "External"
 
         # ── External systems ──────────────────────────────────────────────────
         supabase  = softwareSystem "Supabase Auth" "JWT-based login/logout only. Business data no longer lives here — migrated to self-hosted Postgres 2026-08-13 after the Supabase free-tier project paused." "External"
@@ -39,8 +39,8 @@ workspace "Rincol Web ERP" "Business management system for Rincol Tech Solutions
 
                 # Utilities
                 pdfUtil    = component "PDF Generator" "ReportLab-based PDF generation for quotations, receipts, and customer statements. Matches desktop app design (letterhead, signature, QR code)." "utils/pdf.py"
-                notifyUtil = component "Notification Service" "Internal notifications: Telegram group and personal DMs plus internal emails, sent from a background thread. Also holds the customer email senders: quotation and receipt, which customerDispatch calls synchronously, and the statement sender, which the customer module calls directly." "utils/notify.py"
-                customerDispatch = component "Customer Dispatch" "The one path a customer-facing document (quotation, receipt) takes to the customer: email then WhatsApp, synchronously inside the request, returning the real per-channel outcome for the flash. Builds the receipt PDF when an email OR a phone is on file. Receipt edits re-send only when the operator ticks Resend." "utils/customer_dispatch.py"
+                notifyUtil = component "Notification Service" "Internal notifications: Telegram group and personal DMs plus internal emails, sent from a background thread. Also holds the customer email senders (quotation, receipt, statement), which customerDispatch calls synchronously." "utils/notify.py"
+                customerDispatch = component "Customer Dispatch" "The one path a customer-facing document (quotation, receipt, account statement) takes to the customer: email then WhatsApp, synchronously inside the request, returning the real per-channel outcome for the flash. Builds the receipt and statement PDFs when an email OR a phone is on file. Receipt edits re-send only when the operator ticks Resend." "utils/customer_dispatch.py"
                 whatsappUtil = component "WhatsApp Sender" "Normalizes the customer phone to E.164 (refusing ambiguous national numbers) and posts the PDF plus caption to the bridge with a 25s timeout so email plus WhatsApp typically fit inside the 60s gunicorn worker timeout (the SMTP 15s timeout is per operation, not a total budget)." "utils/whatsapp.py"
                 tgBot      = component "Telegram Bot Handler" "Handles incoming Telegram callbacks (approve quotation, update status, log note). Webhook registered at /telegram/webhook." "utils/tg_bot.py"
                 dbUtil     = component "DB Utility" "psycopg2 ThreadedConnectionPool (1-5 conns). Per-request connection via Flask g. Helper functions: query, query_one, execute." "utils/db.py"
@@ -75,8 +75,7 @@ workspace "Rincol Web ERP" "Business management system for Rincol Tech Solutions
         # ── Component relationships ────────────────────────────────────────────
         authModule      -> dbUtil      "Session validation"
         customerModule  -> dbUtil      "CRUD customers, link quotations"
-        customerModule  -> notifyUtil  "Send statement email"
-        customerModule  -> pdfUtil     "Generate statement PDF"
+        customerModule  -> customerDispatch "Send account statement PDF (email and WhatsApp) with the live statement link"
         quotationModule -> dbUtil      "CRUD quotations + items"
         quotationModule -> notifyUtil  "Notify on create/update/status change"
         quotationModule -> customerDispatch "Send quotation PDF to customer on Pending/Approved"
@@ -102,7 +101,7 @@ workspace "Rincol Web ERP" "Business management system for Rincol Tech Solutions
         notifyUtil      -> gmailSmtp   "Send email"
         customerDispatch -> notifyUtil "Customer email senders"
         customerDispatch -> whatsappUtil "Customer WhatsApp send"
-        customerDispatch -> pdfUtil    "Build receipt PDF"
+        customerDispatch -> pdfUtil    "Build receipt and statement PDFs"
         whatsappUtil    -> whatsappBridge "POST /api/send"
         tgBot           -> customerDispatch "Send receipt to customer after a bot-created receipt"
         notifyUtil      -> telegram    "Send messages + keyboards"
