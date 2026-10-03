@@ -40,24 +40,14 @@ from utils.notify import (notify_maintenance, notify_quotation,
                            notify_quotation_status, notify_receipt,
                            notify_task, notify_settlement, notify_balancing_job,
                            send_customer_statement, send_quotation_to_customer)
-from utils.whatsapp import send_quotation_whatsapp
+from utils.customer_dispatch import (dispatch_to_customer, dispatch_receipt,
+                                     load_default_sig as _load_default_sig)
 from utils.tg_bot import handle_update as _tg_handle_update
 
 
 @app.teardown_appcontext
 def _teardown_db(exc):
     close_db(error=exc is not None)
-
-# Default signature — always included on quotation PDFs
-_DEFAULT_SIG_PATH = os.path.join(os.path.dirname(__file__), "static", "img", "signature.png")
-
-def _load_default_sig():
-    """Return signature bytes if the file exists, else None."""
-    try:
-        with open(_DEFAULT_SIG_PATH, "rb") as f:
-            return f.read()
-    except FileNotFoundError:
-        return None
 
 
 # ── Auth helpers ──────────────────────────────────────────────────────────────
@@ -321,52 +311,26 @@ def _save_quotation(qid):
 # buggy flash logic in two routes (create/edit + status-change) that both
 # lied about send success; this is the minimal single place to fix it once.
 def _dispatch_quotation_to_customer(q_rec: dict, pdf_bytes: bytes, status: str):
-    """Send the quotation PDF to the customer over email and/or WhatsApp,
-    SYNCHRONOUSLY, and return (html_message, flash_category) describing what
-    actually happened — never a blanket 'sent' regardless of the real outcome.
-    """
-    # qno/client/customer_email/wa_msg all originate from user-editable form
-    # fields (or bridge error text echoing them back) and this flash is
-    # rendered with |safe in base.html — escape before interpolating.
-    qno            = escape(q_rec.get("quotation_no", "—"))
-    client         = escape((q_rec.get("customer_name") or "").strip())
-    amount         = q_rec.get("total_amount") or 0
-    customer_email = (q_rec.get("customer_email") or "").strip()
-    customer_email_safe = escape(customer_email)
-    customer_phone = (q_rec.get("customer_phone") or "").strip()
-
-    if not pdf_bytes:
-        return f"⚠️ PDF generation failed — quotation was NOT sent to {client}.", "warning"
-
-    email_ok = False
-    if customer_email:
-        email_ok = send_quotation_to_customer(str(qno), str(client), amount, customer_email, pdf_bytes, status)
-
-    wa_ok, wa_msg = False, ""
-    if customer_phone:
-        caption_lines = [
-            f"*Rincol Tech Solutions Ltd* — Quotation {qno}",
-            f"Customer: {client}",
-            f"Amount: UGX {amount:,.0f}",
-            f"Status: {status}",
-        ]
-        if email_ok:
-            caption_lines.append(f"\nThe same has been sent to your email: {customer_email}")
-        wa_ok, wa_msg = send_quotation_whatsapp(customer_phone, str(qno), pdf_bytes, "\n".join(caption_lines))
-    wa_msg_safe = escape(wa_msg)
-
-    parts = []
-    if customer_email:
-        parts.append(f"emailed to {customer_email_safe}" if email_ok else f"email to {customer_email_safe} FAILED")
-    if customer_phone:
-        parts.append("sent on WhatsApp" if wa_ok else f"WhatsApp send FAILED ({wa_msg_safe})")
-    if not parts:
-        return f"📎 Quotation PDF ready for {client} — no email or phone on file, nothing sent automatically.", "warning"
-
-    all_ok = (not customer_email or email_ok) and (not customer_phone or wa_ok)
-    icon = "📎" if (email_ok or wa_ok) else "⚠️"
-    return (f"{icon} Quotation {qno} for {client}: " + "; ".join(parts) + ".",
-            "info" if all_ok else "warning")
+    """Send the quotation PDF to the customer over email and/or WhatsApp via the
+    shared dispatcher, and return (html_message, flash_category) describing what
+    actually happened."""
+    qno    = q_rec.get("quotation_no") or "-"
+    client = (q_rec.get("customer_name") or "").strip()
+    amount = q_rec.get("total_amount") or 0
+    caption = [
+        f"*Rincol Tech Solutions Ltd*: Quotation {qno}",
+        f"Customer: {client}",
+        f"Amount: UGX {amount:,.0f}",
+        f"Status: {status}",
+    ]
+    msg, category = dispatch_to_customer(
+        "Quotation", qno, client, q_rec.get("customer_email"), q_rec.get("customer_phone"),
+        pdf_bytes, caption,
+        lambda to: send_quotation_to_customer(qno, client,
+                                              amount, to, pdf_bytes, status))
+    # flash is rendered with |safe in base.html, and the message echoes
+    # user-editable fields and bridge error text, so escape it here
+    return str(escape(msg)), category
 
 
 def _maybe_create_approval_task(qid: str, q_rec: dict):
@@ -619,21 +583,10 @@ def receipts_new():
         flash("Receipt saved.", "success")
         new_r = query_one("SELECT * FROM receipts WHERE id=%s", (rid,))
         if new_r:
-            r_dict         = dict(new_r)
-            customer_email = (r_dict.get("customer_email") or "").strip()
-            customer_name  = (r_dict.get("customer_name") or "").strip()
-            pdf_bytes      = None
-            if customer_email:
-                try:
-                    pdf_bytes = build_receipt_pdf(r_dict, sig_issued_bytes=_load_default_sig())
-                except Exception:
-                    pdf_bytes = None
-            notify_receipt(r_dict, pdf_bytes=pdf_bytes)
-            if customer_email:
-                if pdf_bytes:
-                    flash(f"📎 Receipt PDF sent to {customer_name} &lt;{customer_email}&gt;.", "info")
-                else:
-                    flash(f"⚠️ PDF generation failed — receipt was NOT emailed to {customer_name} ({customer_email}).", "warning")
+            r_dict = dict(new_r)
+            notify_receipt(r_dict)
+            msg, category = dispatch_receipt(r_dict)
+            flash(str(escape(msg)), category)
         return redirect(url_for("receipts_view", rid=rid))
 
     # Auto-generate next receipt number for pre-fill
@@ -702,21 +655,13 @@ def receipts_edit(rid):
         flash("Receipt updated.", "success")
         updated_r = query_one("SELECT * FROM receipts WHERE id=%s", (rid,))
         if updated_r:
-            r_dict         = dict(updated_r)
-            customer_email = (r_dict.get("customer_email") or "").strip()
-            customer_name  = (r_dict.get("customer_name") or "").strip()
-            pdf_bytes      = None
-            if customer_email:
-                try:
-                    pdf_bytes = build_receipt_pdf(r_dict, sig_issued_bytes=_load_default_sig())
-                except Exception:
-                    pdf_bytes = None
-            notify_receipt(r_dict, pdf_bytes=pdf_bytes)
-            if customer_email:
-                if pdf_bytes:
-                    flash(f"📎 Receipt PDF sent to {customer_name} &lt;{customer_email}&gt;.", "info")
-                else:
-                    flash(f"⚠️ PDF generation failed — receipt was NOT emailed to {customer_name} ({customer_email}).", "warning")
+            r_dict = dict(updated_r)
+            notify_receipt(r_dict)
+            # an edit re-sends the customer copy only when asked; otherwise every
+            # typo fix would land as a second receipt in the customer's WhatsApp
+            if f.get("resend_to_customer") == "1":
+                msg, category = dispatch_receipt(r_dict)
+                flash(str(escape(msg)), category)
         return redirect(url_for("receipts_view", rid=rid))
     quotations = query("SELECT id, quotation_no, customer_name, customer_phone, customer_email, total_amount FROM quotations ORDER BY date DESC LIMIT 100")
     return render_template("receipt/form.html", r=r, quotations=quotations, prefill_qid=None)

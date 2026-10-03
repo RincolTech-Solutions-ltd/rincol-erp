@@ -8,6 +8,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 import requests
+from markupsafe import escape
 
 # ── Config ────────────────────────────────────────────────────────────────────
 _TG_TOKEN    = os.environ.get("TELEGRAM_BOT_TOKEN", "")
@@ -320,12 +321,16 @@ def send_quotation_to_customer(qno: str, client: str, amount: float,
         return False
     if status == "Approved":
         subject    = f"Approved Quotation {qno} — Rincol Tech Solutions Ltd"
-        intro_line = (f"Thank you for approving quotation <strong>{qno}</strong>. "
+        intro_line = (f"Thank you for approving quotation <strong>{escape(qno)}</strong>. "
                       f"Please find your confirmed quotation attached for your records.")
     else:
         subject    = f"Quotation {qno} — Rincol Tech Solutions Ltd"
         intro_line = (f"Thank you for your interest. Please find attached our quotation "
-                      f"<strong>{qno}</strong> for your review.")
+                      f"<strong>{escape(qno)}</strong> for your review.")
+
+    # user-entered fields are escaped for the HTML body only; the subject
+    # and the attachment filename are plain text and stay raw
+    h_qno, h_client, h_status = escape(qno), escape(client), escape(status)
 
     html_body = f"""
     <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto">
@@ -334,13 +339,13 @@ def send_quotation_to_customer(qno: str, client: str, amount: float,
         <div style="color:#6b7280;font-size:12px;margin-top:4px">Solar & Energy Solutions</div>
       </div>
       <div style="border:1px solid #e5e7eb;border-top:none;padding:28px;border-radius:0 0 8px 8px">
-        <p style="margin:0 0 16px">Dear <strong>{client}</strong>,</p>
+        <p style="margin:0 0 16px">Dear <strong>{h_client}</strong>,</p>
         <p style="margin:0 0 16px;color:#374151">{intro_line}</p>
         <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:16px;margin:20px 0">
           <table style="border-collapse:collapse;width:100%">
-            <tr><td style="color:#6b7280;padding:4px 16px 4px 0">Quotation Ref</td><td><strong>{qno}</strong></td></tr>
+            <tr><td style="color:#6b7280;padding:4px 16px 4px 0">Quotation Ref</td><td><strong>{h_qno}</strong></td></tr>
             <tr><td style="color:#6b7280;padding:4px 16px 4px 0">Total Amount</td><td><strong>UGX {amount:,.0f}</strong></td></tr>
-            <tr><td style="color:#6b7280;padding:4px 16px 4px 0">Status</td><td><strong>{status}</strong></td></tr>
+            <tr><td style="color:#6b7280;padding:4px 16px 4px 0">Status</td><td><strong>{h_status}</strong></td></tr>
           </table>
         </div>
         <p style="margin:0 0 16px;color:#374151">If you have any questions or would like to discuss further, please don't hesitate to reach out to us.</p>
@@ -393,7 +398,7 @@ def notify_quotation_status(record: dict, new_status: str):
 
 # ── Receipts ──────────────────────────────────────────────────────────────────
 
-def notify_receipt(record: dict, pdf_bytes: bytes = None):
+def notify_receipt(record: dict):
     r              = record
     rid            = r.get("id", "")
     rno            = r.get("receipt_no", "—")
@@ -402,7 +407,6 @@ def notify_receipt(record: dict, pdf_bytes: bytes = None):
     paid           = r.get("amount_paid") or 0
     balance        = r.get("balance") or 0
     method         = r.get("payment_method") or "Cash"
-    customer_email = (r.get("customer_email") or "").strip()
     link           = f"{_APP_URL}/receipts/{rid}"
 
     bal_note = "SETTLED ✅" if balance <= 0 else f"UGX {balance:,.0f} still owed"
@@ -423,16 +427,23 @@ def notify_receipt(record: dict, pdf_bytes: bytes = None):
         _send_telegram(tg)
         _send_email(f"[Rincol ERP] 💰 Payment — {client} — UGX {paid:,.0f}",
                     _email_wrap("💰", "Payment Received", rows, link, "View Receipt"))
-        if pdf_bytes and customer_email:
-            _send_receipt_to_customer(rno, client, paid, balance, method, customer_email, pdf_bytes)
+        # The customer copy (email + WhatsApp) is sent synchronously by
+        # utils/customer_dispatch.dispatch_receipt so the caller can report the
+        # real outcome. Do not re-add a customer send in this thread; it would
+        # double-send.
     threading.Thread(target=_go, daemon=True).start()
 
 
-def _send_receipt_to_customer(rno: str, client: str, paid: float, balance: float,
-                               method: str, customer_email: str, pdf_bytes: bytes):
+def send_receipt_to_customer(rno: str, client: str, paid: float, balance: float,
+                             method: str, customer_email: str, pdf_bytes: bytes) -> bool:
     if not _GMAIL_PASS:
-        return
+        print(f"[RECEIPT-EMAIL] SKIP: no Gmail SMTP password configured", flush=True)
+        return False
     bal_note = "Fully settled — thank you!" if balance <= 0 else f"UGX {balance:,.0f} outstanding"
+
+    # user-entered fields are escaped for the HTML body only; the subject
+    # and the attachment filename are plain text and stay raw
+    h_rno, h_client, h_method = escape(rno), escape(client), escape(method)
 
     html_body = f"""
     <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto">
@@ -441,13 +452,13 @@ def _send_receipt_to_customer(rno: str, client: str, paid: float, balance: float
         <div style="color:#6b7280;font-size:12px;margin-top:4px">Solar & Energy Solutions</div>
       </div>
       <div style="border:1px solid #e5e7eb;border-top:none;padding:28px;border-radius:0 0 8px 8px">
-        <p style="margin:0 0 16px">Dear <strong>{client}</strong>,</p>
+        <p style="margin:0 0 16px">Dear <strong>{h_client}</strong>,</p>
         <p style="margin:0 0 16px;color:#374151">Thank you for your payment. Please find your official receipt attached.</p>
         <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:16px;margin:20px 0">
           <table style="border-collapse:collapse;width:100%">
-            <tr><td style="color:#6b7280;padding:4px 16px 4px 0">Receipt Ref</td><td><strong>{rno}</strong></td></tr>
+            <tr><td style="color:#6b7280;padding:4px 16px 4px 0">Receipt Ref</td><td><strong>{h_rno}</strong></td></tr>
             <tr><td style="color:#6b7280;padding:4px 16px 4px 0">Amount Paid</td><td><strong>UGX {paid:,.0f}</strong></td></tr>
-            <tr><td style="color:#6b7280;padding:4px 16px 4px 0">Payment Method</td><td><strong>{method}</strong></td></tr>
+            <tr><td style="color:#6b7280;padding:4px 16px 4px 0">Payment Method</td><td><strong>{h_method}</strong></td></tr>
             <tr><td style="color:#6b7280;padding:4px 16px 4px 0">Balance</td><td><strong>{bal_note}</strong></td></tr>
           </table>
         </div>
@@ -459,7 +470,7 @@ def _send_receipt_to_customer(rno: str, client: str, paid: float, balance: float
       </div>
     </div>"""
 
-    _smtp_send([customer_email], f"Payment Receipt {rno} — Rincol Tech Solutions Ltd", html_body,
+    return _smtp_send([customer_email], f"Payment Receipt {rno} from Rincol Tech Solutions Ltd", html_body,
              attachments=[{"filename": f"{rno}.pdf",
                            "content": base64.b64encode(pdf_bytes).decode()}])
 
