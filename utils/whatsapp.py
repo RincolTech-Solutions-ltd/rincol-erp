@@ -64,18 +64,18 @@ def _normalize_phone(phone: str):
     return digits if 11 <= len(digits) <= 15 else None
 
 
-def send_quotation_whatsapp(phone: str, quotation_no: str, pdf_bytes: bytes, caption: str):
-    """Send the quotation PDF with a caption to a customer's WhatsApp.
+def send_document_whatsapp(phone: str, doc_no: str, pdf_bytes: bytes, caption: str):
+    """Send a document PDF (quotation, receipt) with a caption to a customer's WhatsApp.
     Returns (success: bool, message: str)."""
     number = _normalize_phone(phone)
     if not number:
         return False, f"no usable WhatsApp number from '{phone}'"
 
-    # quotation_no reaches here from a user-editable form field — sanitize
+    # doc_no reaches here from a user-editable form field, so sanitize
     # before using it as a filename so it can't escape the temp dir or
     # collide with an unintended path (the bridge, running as root, reads
     # whatever path we hand it).
-    safe_no = re.sub(r"[^A-Za-z0-9._-]", "_", quotation_no) or "quotation"
+    safe_no = re.sub(r"[^A-Za-z0-9._-]", "_", doc_no) or "document"
     tmpdir = tempfile.mkdtemp(prefix="rincol-wa-")
     path = os.path.join(tmpdir, f"{safe_no}.pdf")
     try:
@@ -85,17 +85,20 @@ def send_quotation_whatsapp(phone: str, quotation_no: str, pdf_bytes: bytes, cap
             "recipient": number,
             "message": caption,
             "media_path": path,
-        }, timeout=60)
+        # 25s: a healthy bridge answers in seconds, and this runs inside the web
+        # request, which gunicorn kills at 60s; email (15s per SMTP step, so not a
+        # hard budget) plus this should normally fit under it
+        }, timeout=25)
         data = r.json()
         success = bool(data.get("success"))
         message = data.get("message", "")
-        print(f"[WHATSAPP] {'OK' if success else 'FAILED'} to {number} ({quotation_no}): {message}", flush=True)
+        print(f"[WHATSAPP] {'OK' if success else 'FAILED'} to {number} ({doc_no}): {message}", flush=True)
         return success, message
     except requests.exceptions.Timeout:
-        print(f"[WHATSAPP] TIMEOUT sending to {number} ({quotation_no}) — may still deliver", flush=True)
+        print(f"[WHATSAPP] TIMEOUT sending to {number} ({doc_no}), may still deliver", flush=True)
         return False, "bridge did not respond in time — check WhatsApp before resending, it may still arrive"
     except Exception as e:
-        print(f"[WHATSAPP] EXCEPTION sending to {number} ({quotation_no}): {e}", flush=True)
+        print(f"[WHATSAPP] EXCEPTION sending to {number} ({doc_no}): {e}", flush=True)
         return False, str(e)
     finally:
         try:

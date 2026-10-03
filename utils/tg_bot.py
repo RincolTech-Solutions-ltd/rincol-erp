@@ -47,7 +47,9 @@ def _post(method: str, payload: dict) -> dict:
 
 def send(chat_id, text: str, keyboard=None, parse_mode="Markdown") -> dict:
     """Send a plain message, optionally with an inline keyboard."""
-    payload = {"chat_id": chat_id, "text": text, "parse_mode": parse_mode}
+    payload = {"chat_id": chat_id, "text": text}
+    if parse_mode:
+        payload["parse_mode"] = parse_mode
     if keyboard:
         payload["reply_markup"] = {"inline_keyboard": keyboard}
     return _post("sendMessage", payload)
@@ -672,6 +674,7 @@ def _finalize_payment(chat_id, qid, d):
 
 def _finalize_receipt(chat_id, d, person):
     from utils.notify import notify_receipt
+    from utils.customer_dispatch import dispatch_receipt
     import uuid
     amount  = d.get("amount", 0)
     method  = d.get("method", "Cash")
@@ -695,14 +698,15 @@ def _finalize_receipt(chat_id, d, person):
     q = query_one("SELECT * FROM quotations WHERE id=%s", (qid,)) if qid else None
     cname = q["customer_name"] if q else "Unknown"
     cphone = q["customer_phone"] if q else ""
+    cemail = (q.get("customer_email") or "") if q else ""
 
     rid = str(uuid.uuid4())
     execute("""INSERT INTO receipts
-               (id, receipt_no, date, customer_name, customer_phone,
+               (id, receipt_no, date, customer_name, customer_phone, customer_email,
                 being_for, amount_fig, amount_paid, balance,
                 payment_method, issued_name, received_name, quotation_id)
-               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
-            (rid, rno, date.today().isoformat(), cname, cphone,
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+            (rid, rno, date.today().isoformat(), cname, cphone, cemail,
              label, amount, amount, 0,
              method, person.title(), cname, qid))
 
@@ -714,6 +718,10 @@ def _finalize_receipt(chat_id, d, person):
          f"[🔗 Open]({_APP_URL}/receipts/{rid})")
     if r:
         notify_receipt(dict(r))
+        msg, _ = dispatch_receipt(dict(r))
+        # plain text: the outcome echoes emails and bridge errors whose
+        # underscores would break Telegram Markdown
+        send(chat_id, msg, parse_mode=None)
 
 
 def _finalize_bal_spend(chat_id, jid, d):
